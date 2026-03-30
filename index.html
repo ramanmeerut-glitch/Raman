@@ -621,7 +621,7 @@ window.APP = window.APP || new Proxy({}, {
   <button class="tab on" data-t="home" onclick="APP.goTab('home')">🏠 Dashboard</button>
   <button class="tab" data-t="property" onclick="APP.goTab('property')">🏢 Property</button>
   <button class="tab" data-t="rent" onclick="APP.goTab('rent')">💰 Rent</button>
-  <button class="tab" data-t="expense" onclick="APP.goTab('expense')">💰 Khata Book</button>
+  <button class="tab" data-t="expense" onclick="APP.goTab('expense')">💼 Finance</button>
   <button class="tab" data-t="khata" onclick="APP.goTab('khata')">📒 Khata Book</button>
   <button class="tab" data-t="reminder" onclick="APP.goTab('reminder')">🔔 Reminders</button>
   <button class="tab" data-t="medical" onclick="APP.medFilter30=false;APP.goTab('medical')">🏥 Medical</button>
@@ -663,7 +663,7 @@ window.APP = window.APP || new Proxy({}, {
     </label>
     <select id="kbp_cat" style="background:var(--bg);border:1.5px solid var(--bdr2);color:var(--txt);padding:8px 11px;border-radius:7px;font-family:'Nunito',sans-serif;font-size:.85rem;outline:none;width:100%;">
       <option value="personal">👨‍👩‍👧 Personal / Family</option>
-      <option value="business">💼 Business / Client</option>
+
       <option value="property">🏠 Property / Rent</option>
       <option value="friend">👫 Friend</option>
       <option value="vendor">🏪 Vendor / Supplier</option>
@@ -2423,15 +2423,15 @@ const APP={
       dueCount:cats.today.length+cats.thisWeek.length};
   },
 
-  // ── 5. Finance summary (this month) ──
-  _calcFinance(){
-    const now=new Date();
-    const curMoStr=now.toISOString().slice(0,7);
-    const allExps=this.expenses;
-    const thisMonthExp=allExps.filter(e=>e.type==='expense'&&e.date&&e.date.startsWith(curMoStr)).reduce((s,e)=>s+Number(e.amount),0);
-    const thisMonthInc=allExps.filter(e=>e.type==='income'&&e.date&&e.date.startsWith(curMoStr)).reduce((s,e)=>s+Number(e.amount),0);
-    return{thisMonthExp,thisMonthInc,loanOutstanding:0,loanGiven:0,loanReceived:0};
-  },
+  // ── 5. Finance summary (DEPRECATED - replaced by Khata Book) ──
+  // _calcFinance(){
+  //   const now=new Date();
+  //   const curMoStr=now.toISOString().slice(0,7);
+  //   const allExps=this.expenses;
+  //   const thisMonthExp=allExps.filter(e=>e.type==='expense'&&e.date&&e.date.startsWith(curMoStr)).reduce((s,e)=>s+Number(e.amount),0);
+  //   const thisMonthInc=allExps.filter(e=>e.type==='income'&&e.date&&e.date.startsWith(curMoStr)).reduce((s,e)=>s+Number(e.amount),0);
+  //   return{thisMonthExp,thisMonthInc,loanOutstanding:0,loanGiven:0,loanReceived:0};
+  // },
 
   renderPills(){
     // ── Use shared engine — single source of truth ──
@@ -2447,28 +2447,45 @@ const APP={
                 remState.today.filter(e=>e._src==='medical').length+
                 remState.thisMonth.filter(e=>e._src==='medical').length;
     const upTrips=this.trips.filter(t=>new Date(t.dep)>=now).length;
-    const fin=this._calcFinance();
-    const thisMonthExp=fin.thisMonthExp;
-    const thisMonthInc=fin.thisMonthInc;
     document.getElementById('pillsBar').innerHTML=`
       <div class="pill" onclick="APP.goTab('rent')" style="background:linear-gradient(135deg,${pend<=0?'#f0faf4,#dcf5e8':'#fff0f0,#ffe0e0'});border-color:${pend<=0?'#90c8a0':'#f0a0a0'};">
         <div class="pill-lbl" style="color:${pend<=0?'var(--grn)':'#b92d2d'}"><b>💸 OUTSTANDING</b></div>
         <div class="pill-val" style="color:${pend<=0?'var(--grn)':'#b92d2d'};font-size:0.95rem;font-weight:900;">${pend<=0?'✅ Clear':fmt(pend)}</div>
         <div class="pill-sub" style="color:${pend<=0?'var(--grn)':'#b92d2d'};font-weight:700;">${pend<=0?'No dues':'All due'}</div>
       </div>
-      <div class="pill" onclick="APP.goTab('expense')" style="background:linear-gradient(135deg,#fff5f5,#ffe8e8);border-color:#f0a0a0;">
-        <div class="pill-lbl" style="color:var(--red)"><b>💼 FINANCE</b></div>
-        <div class="pill-val" style="color:var(--red);font-size:.82rem;font-weight:900;">${fmt(thisMonthExp)}</div>
-        <div class="pill-sub" style="color:var(--grn);font-weight:700;">Inc: ${fmt(thisMonthInc)}</div>
+      <div class="pill" onclick="APP.goTab('khata')" style="background:linear-gradient(135deg,#f5f0ff,#ede0ff);border-color:#c0a0f0;">
+        <div class="pill-lbl" style="color:var(--pur)"><b>📒 KHATA BOOK</b></div>
         ${(()=>{
-          const parties=APP.kbParties||[];
-          let lena=0,dena=0,lenaP=0,denaP=0;
-          parties.forEach(p=>{const b=APP._kbPartyBalance(p.id);if(b.net>0){lena+=b.net;lenaP++;}else if(b.net<0){dena+=Math.abs(b.net);denaP++;}});
-          if(!lena&&!dena) return '';
-          return `<div style="font-size:.6rem;margin-top:3px;display:flex;gap:5px;flex-wrap:wrap;">
-            ${lena?`<span style="color:#166534;font-weight:800;">🤲${fmt(lena)}</span>`:''}
-            ${dena?`<span style="color:#c0392b;font-weight:800;">💸${fmt(dena)}</span>`:''}
-          </div>`;
+          const entries = APP.kbEntries || [];
+          const lenaParties = new Set();
+          const denaParties = new Set();
+          let lenaTotal = 0;
+          let denaTotal = 0;
+          
+          entries.forEach(e => {
+            if (e.type === 'lena') {
+              lenaTotal += Number(e.amount || 0);
+              lenaParties.add(e.partyId);
+            } else if (e.type === 'dena') {
+              denaTotal += Number(e.amount || 0);
+              denaParties.add(e.partyId);
+            }
+          });
+          
+          return `
+            <div style="display:flex;justify-content:space-between;gap:8px;width:100%;">
+              <div style="flex:1;text-align:left;">
+                <div style="font-size:.62rem;color:#166534;font-weight:700;margin-bottom:2px;">🤲 Liya Hai</div>
+                <div style="font-size:.82rem;font-weight:900;color:#166534;">₹${fmt(lenaTotal)}</div>
+                <div style="font-size:.58rem;color:#166534;font-weight:600;margin-top:1px;">${lenaParties.size} ${lenaParties.size === 1 ? 'party' : 'parties'}</div>
+              </div>
+              <div style="flex:1;text-align:right;">
+                <div style="font-size:.62rem;color:#c0392b;font-weight:700;margin-bottom:2px;">💸 Diya Hai</div>
+                <div style="font-size:.82rem;font-weight:900;color:#c0392b;">₹${fmt(denaTotal)}</div>
+                <div style="font-size:.58rem;color:#c0392b;font-weight:600;margin-top:1px;">${denaParties.size} ${denaParties.size === 1 ? 'party' : 'parties'}</div>
+              </div>
+            </div>
+          `;
         })()}
       </div>
       <div class="pill" onclick="APP.goTab('reminder')" style="background:linear-gradient(135deg,${renewTotal>0?'#fff8ee,#ffeedd':'#f0faf5,#e0f5e8'});border-color:${renewTotal>0?'#e8a060':'#90c8a0'};">
@@ -2520,7 +2537,6 @@ const APP={
     // ── Use shared engine — same data as pills + reminders tab ──
     const outstanding=this._calcOutstanding();
     const remState=this._calcRemindersState();
-    const fin=this._calcFinance();
 
     // Alias for local use (same objects as renderReminders uses)
     const catOverdue=remState.overdue;
@@ -5282,8 +5298,14 @@ const APP={
 
   // ── Sub-tab router ──
   renderExpense(){
-    // Only show the Khata Book summary overview
-    this._finOverview();
+    const sub = this.finSub || 'overview';
+    if(sub === 'overview') this._finOverview();
+    else if(sub === 'accounts') this._finAccounts();
+    else if(sub === 'txn') this._finTransactions();
+    else if(sub === 'budget') this._finBudget();
+    else if(sub === 'charts') this._finCharts();
+    else if(sub === 'reports') this._finReports();
+    else this._finOverview();
   },
 
   _finNav(sub){
@@ -5316,74 +5338,85 @@ const APP={
     catch(e){ return iso; }
   },
 
-  // ═══════════ OVERVIEW (Modified to show Khata Book summary) ═══════════
+  // ═══════════ OVERVIEW ═══════════
   _finOverview(){
     const fmt = window.fmt||(n=>n.toLocaleString('en-IN'));
+    const now = new Date();
+    const curMoStr = now.toISOString().slice(0,7);
+    const allExps = this.expenses || [];
     
-    // Get Khata Book data
-    const parties = this.kbParties || [];
-    const entries = this.kbEntries || [];
+    // Calculate current month stats
+    const thisMonthExp = allExps.filter(e=>e.type==='expense'&&e.date&&e.date.startsWith(curMoStr)).reduce((s,e)=>s+Number(e.amount||0),0);
+    const thisMonthInc = allExps.filter(e=>e.type==='income'&&e.date&&e.date.startsWith(curMoStr)).reduce((s,e)=>s+Number(e.amount||0),0);
+    const balance = thisMonthInc - thisMonthExp;
     
-    // Calculate totals
-    let liyaHaiTotal = 0;
-    let diyaHaiTotal = 0;
-    const liyaHaiParties = new Set();
-    const diyaHaiParties = new Set();
-    
-    entries.forEach(entry => {
-      if (entry.type === 'lena') {
-        liyaHaiTotal += Number(entry.amount || 0);
-        liyaHaiParties.add(entry.partyId);
-      } else if (entry.type === 'dena') {
-        diyaHaiTotal += Number(entry.amount || 0);
-        diyaHaiParties.add(entry.partyId);
-      }
-    });
-    
-    const liyaHaiCount = liyaHaiParties.size;
-    const diyaHaiCount = diyaHaiParties.size;
+    // Recent transactions (last 10)
+    const recent = [...allExps].sort((a,b)=>new Date(b.date||0)-new Date(a.date||0)).slice(0,10);
+    const fD = window.fD||(d=>{if(!d)return'—';try{const x=new Date(d);return x.getDate().toString().padStart(2,'0')+'/'+(x.getMonth()+1).toString().padStart(2,'0')+'/'+x.getFullYear();}catch(e){return d;}});
 
     document.getElementById('pan-expense').innerHTML = `
+      ${this._finHeader('overview')}
+      
       <div style="margin-bottom:20px;">
-        <h2 style="font-size:1.3rem;font-weight:800;color:var(--txt);margin-bottom:8px;">💰 Khata Book</h2>
-        <p style="font-size:.82rem;color:var(--mut);">Summary of all transactions</p>
+        <h2 style="font-size:1.3rem;font-weight:800;color:var(--txt);margin-bottom:8px;">💼 Finance Overview</h2>
+        <p style="font-size:.82rem;color:var(--mut);">Current month summary</p>
       </div>
 
-      <!-- Khata Book Summary Cards -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px;">
-        <!-- Liya Hai (Received) -->
+      <!-- Monthly Summary Cards -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-bottom:20px;">
+        <!-- Income -->
         <div style="background:linear-gradient(135deg,#f0fdf4,#dcfce7);border:1.5px solid #86efac;border-radius:14px;padding:16px 18px;box-shadow:var(--sh);">
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-            <div style="width:38px;height:38px;border-radius:50%;background:#16a34a;display:flex;align-items:center;justify-content:center;font-size:1.1rem;color:#fff;flex-shrink:0;">📥</div>
-            <div style="font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;color:#15803d;font-weight:800;">LIYA HAI</div>
+            <div style="width:38px;height:38px;border-radius:50%;background:#16a34a;display:flex;align-items:center;justify-content:center;font-size:1.1rem;color:#fff;flex-shrink:0;">💰</div>
+            <div style="font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;color:#15803d;font-weight:800;">INCOME</div>
           </div>
-          <div style="font-size:1.6rem;font-weight:900;color:#15803d;font-family:'JetBrains Mono',monospace;margin-bottom:6px;">₹${fmt(liyaHaiTotal)}</div>
-          <div style="font-size:.78rem;color:#16a34a;font-weight:600;">${liyaHaiCount} ${liyaHaiCount === 1 ? 'party' : 'parties'}</div>
+          <div style="font-size:1.6rem;font-weight:900;color:#15803d;font-family:'JetBrains Mono',monospace;margin-bottom:6px;">₹${fmt(thisMonthInc)}</div>
+          <div style="font-size:.78rem;color:#16a34a;font-weight:600;">This Month</div>
         </div>
 
-        <!-- Diya Hai (Given) -->
+        <!-- Expense -->
         <div style="background:linear-gradient(135deg,#fef2f2,#fee2e2);border:1.5px solid #fca5a5;border-radius:14px;padding:16px 18px;box-shadow:var(--sh);">
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-            <div style="width:38px;height:38px;border-radius:50%;background:#dc2626;display:flex;align-items:center;justify-content:center;font-size:1.1rem;color:#fff;flex-shrink:0;">📤</div>
-            <div style="font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;color:#b91c1c;font-weight:800;">DIYA HAI</div>
+            <div style="width:38px;height:38px;border-radius:50%;background:#dc2626;display:flex;align-items:center;justify-content:center;font-size:1.1rem;color:#fff;flex-shrink:0;">💸</div>
+            <div style="font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;color:#b91c1c;font-weight:800;">EXPENSE</div>
           </div>
-          <div style="font-size:1.6rem;font-weight:900;color:#b91c1c;font-family:'JetBrains Mono',monospace;margin-bottom:6px;">₹${fmt(diyaHaiTotal)}</div>
-          <div style="font-size:.78rem;color:#dc2626;font-weight:600;">${diyaHaiCount} ${diyaHaiCount === 1 ? 'party' : 'parties'}</div>
+          <div style="font-size:1.6rem;font-weight:900;color:#b91c1c;font-family:'JetBrains Mono',monospace;margin-bottom:6px;">₹${fmt(thisMonthExp)}</div>
+          <div style="font-size:.78rem;color:#dc2626;font-weight:600;">This Month</div>
+        </div>
+
+        <!-- Balance -->
+        <div style="background:linear-gradient(135deg,${balance>=0?'#f0f9ff,#e0f2fe':'#fff7ed,#ffedd5'});border:1.5px solid ${balance>=0?'#7dd3fc':'#fdba74'};border-radius:14px;padding:16px 18px;box-shadow:var(--sh);">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+            <div style="width:38px;height:38px;border-radius:50%;background:${balance>=0?'#0284c7':'#ea580c'};display:flex;align-items:center;justify-content:center;font-size:1.1rem;color:#fff;flex-shrink:0;">${balance>=0?'✅':'⚠️'}</div>
+            <div style="font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;color:${balance>=0?'#0369a1':'#c2410c'};font-weight:800;">BALANCE</div>
+          </div>
+          <div style="font-size:1.6rem;font-weight:900;color:${balance>=0?'#0369a1':'#c2410c'};font-family:'JetBrains Mono',monospace;margin-bottom:6px;">₹${fmt(Math.abs(balance))}</div>
+          <div style="font-size:.78rem;color:${balance>=0?'#0284c7':'#ea580c'};font-weight:600;">${balance>=0?'Surplus':'Deficit'}</div>
         </div>
       </div>
 
-      <!-- Quick Access Button -->
-      <div style="text-align:center;padding:20px 0;">
-        <button onclick="APP.goTab('khata')" 
-          style="background:var(--acc);color:#fff;border:none;border-radius:12px;padding:12px 24px;font-size:.88rem;font-weight:800;cursor:pointer;font-family:'Nunito',sans-serif;box-shadow:0 3px 12px rgba(44,111,173,.3);transition:all .2s;">
-          📒 View Full Khata Book →
-        </button>
-      </div>
-
-      <!-- Info Note -->
-      <div style="background:var(--dim);border-radius:10px;padding:12px 16px;margin-top:16px;">
-        <div style="font-size:.74rem;color:var(--mut);line-height:1.5;">
-          <strong>Note:</strong> This shows a summary of your Khata Book entries. Click the button above to view detailed party-wise records, add new entries, or manage your accounts.
+      <!-- Recent Transactions -->
+      <div class="card">
+        <div class="card-hdr">
+          <div class="card-title">📋 Recent Transactions</div>
+          <button class="btn b-sm b-gold" onclick="APP._finNav('txn')">View All</button>
+        </div>
+        <div class="card-body">
+          ${recent.length ? recent.map(e=>{
+            const isInc = e.type==='income';
+            const cleanCat = (e.cat||'Other').replace(/^[^\wऀ-ॿÀ-ɏ]+/,'').trim();
+            return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--bdr);">
+              <div style="width:32px;height:32px;border-radius:50%;background:${isInc?'#dcfce7':'#fee2e2'};display:flex;align-items:center;justify-content:center;font-size:.9rem;flex-shrink:0;">${isInc?'💰':'💸'}</div>
+              <div style="flex:1;min-width:0;">
+                <div style="font-size:.82rem;font-weight:700;">${cleanCat}</div>
+                <div style="font-size:.68rem;color:var(--mut);">${fD(e.date)} ${e.note?' • '+e.note:''}</div>
+              </div>
+              <div style="font-size:.88rem;font-weight:900;font-family:'JetBrains Mono',monospace;color:${isInc?'var(--grn)':'var(--red)'};white-space:nowrap;">${isInc?'+':'−'}₹${fmt(e.amount||0)}</div>
+            </div>`;
+          }).join('') : '<div class="empty">No transactions yet</div>'}
+        </div>
+        <div class="card-foot">
+          <button class="btn b-grn b-sm" onclick="APP.openExpModal()">➕ Add Transaction</button>
         </div>
       </div>
     `;
