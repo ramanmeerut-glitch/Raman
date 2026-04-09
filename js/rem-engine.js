@@ -1,10 +1,11 @@
 /* rem-engine.js — Android-style Reminder Engine (REM)
- * Full date-picker, time-picker, repeat configurator, before-reminder logic
+ * Full date-picker, time-picker, repeat configurator, before-reminder logic.
+ * Exports window.REM with public API.
+ * Also wires REM → APP.openReminderModal on DOMContentLoaded.
  */
 
-<script>
-// ═══════════════════════════════════════════════════════════════
-// REM — Android-style Reminder Engine
+'use strict';
+
 // ═══════════════════════════════════════════════════════════════
 window.REM = (function(){
   'use strict';
@@ -1126,7 +1127,3 @@ document.addEventListener('DOMContentLoaded', function(){
     }
   }
 });
-</script>
-
-</body>
-</html>

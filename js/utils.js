@@ -1,8 +1,11 @@
-/* utils.js — Shared utilities
- * uid, fmt, v/sv helpers, date functions, _makePDF, safeDelete
+/* utils.js — Shared Utilities
+ * Modal helper (M), Storage helper (S), uid, fmt, v/sv/vc/sc helpers,
+ * safe date utilities, _makePDF, safeDelete, showUndoSnackbar,
+ * DOM helpers (makeDateInput, syncDate*), _renderTodoWidget
  */
 
-// MODAL & STORE
+'use strict';
+
 // ═══════════════════════════════
 const M={open(id){document.getElementById(id).classList.add('open');},close(id){document.getElementById(id).classList.remove('open');}};
 document.querySelectorAll('.overlay').forEach(o=>o.addEventListener('click',e=>{if(e.target===o&&!o.dataset.noclose)o.classList.remove('open');}));
@@ -687,5 +690,3 @@ function _homeTodoAdd(){
     if(typeof APP!=='undefined'){APP.renderHome();APP.renderPills();}
   }
 }
-
-const APP={

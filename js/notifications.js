@@ -1,11 +1,11 @@
-/* notifications.js — Push Notifications (FCM)
- * _initPushNotifications, _pushGetToken, _pushRequestPermission, _pushCheckTodayReminders
+/* notifications.js — Push Notifications (Firebase Cloud Messaging)
+ * _initPushNotifications, _pushGetToken, _pushRequestPermission,
+ * _pushCheckTodayReminders, _pushDisable, _pushToggle
+ * VAPID key configured below.
  */
 
-<script>
-// Only register Service Worker on http/https — file:// does not support it
-// Service Worker — only on https (not file:// or http://)
-// ═══════════════════════════════════════════════════════
+'use strict';
+
 // PUSH NOTIFICATIONS — Firebase Cloud Messaging
 // VAPID Key: BMpQ5oawocseSUa0Lym92UF0Icbp0BcEXQJWjGmgNvbfC6zmsnYgCUz66u1siEqD191J1OWDSTtSXbduVDh-4jE
 // ═══════════════════════════════════════════════════════

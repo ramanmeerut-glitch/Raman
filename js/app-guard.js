@@ -1,11 +1,11 @@
 /* app-guard.js — APP Proxy Guard
- * Transparent forwarder proxy — loaded before all modules.
+ * Transparent forwarder proxy, loaded FIRST before all modules.
  * Queues any APP.xxx() calls that fire before APP is fully constructed,
  * then replays them once the real APP object is ready via window._APP_FLUSH().
- * This prevents silent failures from race conditions with Firebase / modal state.
  */
 
-// APP guard — transparent forwarder: once real APP is set, all calls go directly
+'use strict';
+
 // Avoids silent failures and race conditions with Firebase / payTId modal state
 (function(){
   var _realAPP = null;
@@ -57,3 +57,4 @@
       });
     }
   };
+})();

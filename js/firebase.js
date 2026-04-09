@@ -1,8 +1,10 @@
-/* firebase.js — Firebase init, real-time sync, S store
- * Handles all cloud persistence
+/* firebase.js — Firebase Init + Real-Time Sync + S Store
+ * _loadScript, _initFirebase, window.SYNC, window.fbSave
+ * Mobile touch optimisations also live here (passive listeners, debounce)
  */
 
-<script>
+'use strict';
+
 // ═══════════════════════════════════════════════════════════
 // MOBILE OPTIMIZATION - Quick Fixes for Android Chrome
 // ═══════════════════════════════════════════════════════════
@@ -571,12 +573,9 @@ function _initFirebase() {
   console.log('[Firebase] Module loaded for project: raman2909-5996e');
 })();
 } // end _initFirebase
-</script>
+
 <div class="overlay" id="eiM"><div class="modal" style="max-width:500px;">
   <h2 id="eiMT">Export</h2>
   <div id="eiMB"></div>
   <div class="modal-foot"><button class="btn b-out" onclick="M.close('eiM')">Close</button></div>
 </div></div>
-
-<script>
-// ═══════════════════════════════
