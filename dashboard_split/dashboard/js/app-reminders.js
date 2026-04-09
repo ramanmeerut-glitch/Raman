@@ -104,11 +104,26 @@
           }
         }catch(e){}
       }
+      // ── Clarify field semantics ──
+      // trigDate  = the alert/reminder date (what user selected as "remind me on")
+      // dueDate   = the actual due/expiry date (from rmm_exp, if set)
+      // alertDate = calculated = trigDate (same as trigDate, for explicit reference)
+      // before    = number of DAYS before dueDate the alert fires (integer string)
+      const dueDateFinal = exp || trigDate; // if exp set, that's the due date; else trigDate is both
+      const alertDateFinal = trigDate;       // trigDate is always the alert date
+      const beforeDaysFinal = parseInt(beforeDays) || 0;
+      // Ensure before is never undefined/NaN
+      const beforeLabel = beforeDaysFinal > 0
+        ? (beforeDaysFinal === 1 ? '1 Day Before' : beforeDaysFinal + ' Days Before')
+        : '';
       data = {...data,
-        trigDate,            // PRIMARY: actual reminder date
-        exp,                 // OPTIONAL: document expiry date
+        trigDate,                         // alert/reminder date (primary trigger)
+        dueDate:  dueDateFinal,           // ✅ actual due/expiry date
+        alertDate: alertDateFinal,        // ✅ explicit alert date = trigDate
+        exp,                              // OPTIONAL: document expiry date (same as dueDate if set)
         issue:   vDate('rmm_issue')||'',
-        before:  beforeDays, // days before expiry (0 = on trigDate)
+        before:  String(beforeDaysFinal), // ✅ always stored as integer string (days, NOT minutes)
+        beforeLabel,                      // ✅ human readable label for UI display
         autorenew: v('rmm_autorenew')||'no',
         period:  v('rmm_period')||'365',
         alertHour,
@@ -519,8 +534,7 @@
       'Visa':'📔','Vehicle RC':'🚘','PAN Card':'🪪','Aadhaar':'🪪','Other':'📌'
     };
 
-    // ── CORE: Get trigger date for any reminder type ──
-    // ✅ Uses reminderDate (= dueDate − before) when set; otherwise trigDate
+    // ── CORE: Get trigger date (= alert date = dueDate − before) ──
     function getTrig(r){
       if(!r) return null;
       if(r.mode==='recurring'){
@@ -528,33 +542,32 @@
         if(r.start) return r.start;
         return null;
       }
-      // ✅ Prefer reminderDate — this is the actual alert date (dueDate - before)
-      if(r.reminderDate && r.reminderDate !== r.trigDate) return r.reminderDate;
-      // If trigDate already saved — subtract before to get real trigger
-      if(r.trigDate) {
-        var bDays = parseInt(r.beforeDays || 0) || 0;
-        // Also try r.before (stored in minutes) → convert to days
-        if(!bDays && r.before) bDays = Math.max(0, Math.round(parseInt(r.before||0) / 1440));
+      // ✅ NEW: use explicit alertDate if stored
+      if(r.alertDate) return r.alertDate;
+      // ✅ NEW: use dueDate − before (all stored as days, not minutes)
+      if(r.dueDate) {
+        var bDays = parseInt(r.before || 0) || 0;
         if(bDays > 0) {
-          var dp2 = r.trigDate.split('-');
-          if(dp2.length === 3) {
-            var d2 = new Date(parseInt(dp2[0]), parseInt(dp2[1])-1, parseInt(dp2[2]), 0,0,0,0);
-            d2.setDate(d2.getDate() - bDays);
-            return d2.getFullYear()+'-'+String(d2.getMonth()+1).padStart(2,'0')+'-'+String(d2.getDate()).padStart(2,'0');
+          var dp3 = r.dueDate.split('-');
+          if(dp3.length === 3) {
+            var d3 = new Date(parseInt(dp3[0]), parseInt(dp3[1])-1, parseInt(dp3[2]), 0,0,0,0);
+            d3.setDate(d3.getDate() - bDays);
+            return d3.getFullYear()+'-'+String(d3.getMonth()+1).padStart(2,'0')+'-'+String(d3.getDate()).padStart(2,'0');
           }
         }
-        return r.trigDate;
+        return r.dueDate;
       }
-      // Expiry-based (legacy): triggerDate = expiryDate - beforeDays
+      // Legacy: trigDate stored (older reminders without dueDate)
+      if(r.trigDate) return r.trigDate;
+      // Expiry-based (legacy without trigDate/dueDate)
       if(!r.exp) return null;
       var ep=r.exp.split('-');
       if(ep.length!==3) return null;
       var ey=parseInt(ep[0]),em=parseInt(ep[1])-1,ed=parseInt(ep[2]);
       if(isNaN(ey)||isNaN(em)||isNaN(ed)) return null;
       var exp=new Date(ey,em,ed,0,0,0,0);
-      var before=parseInt(r.before||0);
-      // r.before stored as minutes in new reminders, as days in old ones
-      var beforeD = before > 1440 ? Math.round(before/1440) : before;
+      // ✅ before is ALWAYS stored as integer days (never minutes)
+      var beforeD = parseInt(r.before||0) || 0;
       if(beforeD>0) exp.setDate(exp.getDate()-beforeD);
       return exp.getFullYear()+'-'+String(exp.getMonth()+1).padStart(2,'0')+'-'+String(exp.getDate()).padStart(2,'0');
     }
@@ -815,10 +828,21 @@
               ${e.type||'—'} ${isRecurring?'· 🔁 '+(prdLabel[e.recurPeriod]||'Recurring'):''}
               ${!isRentAuto&&!isRecurring&&e.beforeLabel?'<span style="color:#2196f3;font-weight:700;margin-left:4px;">🔔 '+e.beforeLabel+'</span>':''}
             </div>
-            ${!isRentAuto&&!isRecurring&&e.beforeLabel&&e.trigDate&&e._trig&&e._trig!==e.trigDate?
-              `<div style="font-size:.62rem;color:var(--mut);margin-top:1px;">Alert: ${fD(e._trig)} · Due: ${fD(e.trigDate)}</div>` :
-              (!isRentAuto&&e._trig?`<div style="font-size:.62rem;color:var(--mut);margin-top:1px;">${fD(e._trig)}</div>`:'')}
-            ${e.snoozedUntil?`<div style="font-size:.6rem;color:#b06000;margin-top:1px;">⏰ Snoozed until ${(function(){var d=new Date(e.snoozedUntil);return d.toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});})()}</div>`:''}
+            ${(()=>{
+              if(isRentAuto||isRecurring) return '';
+              // ✅ FIX: Show Due date AND alert date separately when before > 0
+              const dueDateStr  = e.dueDate || e.exp || e.trigDate || '';
+              const alertDateStr = e.alertDate || e._trig || '';
+              const bDays = parseInt(e.before||0)||0;
+              if(dueDateStr && alertDateStr && bDays > 0 && dueDateStr !== alertDateStr){
+                // Show both lines
+                return '<div style="font-size:.62rem;color:var(--txt);font-weight:700;margin-top:1px;">📅 Due: '+fD(dueDateStr)+'</div>'
+                  +'<div style="font-size:.62rem;color:#1565c0;margin-top:1px;">🔔 Reminder: '+fD(alertDateStr)+' ('+bDays+' day'+(bDays>1?'s':'')+' before)</div>';
+              }
+              // Single date (no before offset)
+              const showDate = alertDateStr || dueDateStr;
+              return showDate ? '<div style="font-size:.62rem;color:var(--mut);margin-top:1px;">'+fD(showDate)+'</div>' : '';
+            })()}            ${e.snoozedUntil?`<div style="font-size:.6rem;color:#b06000;margin-top:1px;">⏰ Snoozed until ${(function(){var d=new Date(e.snoozedUntil);return d.toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});})()}</div>`:''}
           </div>
           <div style="text-align:right;flex-shrink:0;">
             ${badge}
@@ -1229,14 +1253,14 @@
         const invD = _getRentInvoiceDate(r);
         dateDisp = invD ? '· Invoice: '+fD(invD) : '· Rent';
       } else {
-        // Show Due date (trigDate); if alertDate differs, show both
-        var _dueD2 = r.trigDate || r.exp || r.nextTrigger || '';
-        var _alertD2 = r.reminderDate || _dueD2;
-        var _bDays2 = parseInt(r.beforeDays||0) || (r.before?Math.round(parseInt(r.before||0)/1440):0);
+        // ✅ FIX: use dueDate (actual due/expiry) and alertDate (reminder trigger)
+        var _dueD2  = r.dueDate || r.exp || r.trigDate || r.nextTrigger || '';
+        var _alertD2= r.alertDate || r.trigDate || _dueD2;
+        var _bDays2 = parseInt(r.before||0) || 0; // ✅ always stored as days, not minutes
         if(_dueD2 && _alertD2 && _alertD2 !== _dueD2 && _bDays2 > 0){
-          dateDisp = '· Due: '+fD(_dueD2)+' 🔔 '+fD(_alertD2)+'('+_bDays2+'d before)';
+          dateDisp = '· Due: '+fD(_dueD2)+' 🔔 '+fD(_alertD2)+' ('+_bDays2+'d before)';
         } else {
-          dateDisp = _dueD2 ? '· '+fD(_dueD2) : '';
+          dateDisp = _alertD2 ? '· '+fD(_alertD2) : '';
         }
       }
       const typeLabel = isRent ? 'Rent' : (r.type||'').replace(/^[\u{1F000}-\u{1FFFF}\u{2600}-\u{27FF}]\s*/u,'').trim()||'Other';
