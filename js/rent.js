@@ -418,7 +418,7 @@
         This is a computer-generated receipt and is valid without a physical signature. · Raman Kumar Property Management
       </div>
     </div>
-    <script>window.onload=function(){window.print();}<\/script>
+    window.onload=function(){window.print();}<\/script>
     </body></html>`;
 
     const _rcptBlob=new Blob([html],{type:'text/html;charset=utf-8'});

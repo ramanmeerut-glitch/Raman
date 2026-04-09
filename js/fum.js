@@ -277,4 +277,4 @@ document.addEventListener('click', function(e){
     menu.style.display = 'none';
   }
 });
-</script>
+

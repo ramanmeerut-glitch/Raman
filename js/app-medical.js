@@ -445,7 +445,7 @@
     </div>
 
     <div class="footer">Raman Kumar — Personal Health Dashboard · Report generated on ${new Date().toLocaleString('en-IN')}</div>
-    <script>window.onload=()=>window.print();<\/script>
+    window.onload=()=>window.print();<\/script>
     </body></html>`;
 
     // Build PDF using jsPDF
