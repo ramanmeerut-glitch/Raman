@@ -1,6 +1,6 @@
-/* firebase.js — Firebase Init + Real-Time Sync + S Store
+/* firebase.js — Firebase Init + Real-Time Sync
  * _loadScript, _initFirebase, window.SYNC, window.fbSave
- * Mobile touch optimisations also live here (passive listeners, debounce)
+ * Mobile touch optimisations: passive listeners, debounce
  */
 
 'use strict';
@@ -572,10 +572,3 @@ function _initFirebase() {
   window.fbConnected = true;
   console.log('[Firebase] Module loaded for project: raman2909-5996e');
 })();
-} // end _initFirebase
-
-<div class="overlay" id="eiM"><div class="modal" style="max-width:500px;">
-  <h2 id="eiMT">Export</h2>
-  <div id="eiMB"></div>
-  <div class="modal-foot"><button class="btn b-out" onclick="M.close('eiM')">Close</button></div>
-</div></div>

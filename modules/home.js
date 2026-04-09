@@ -1,7 +1,7 @@
-/* modules/home.js — APP Core + Dashboard Home
- * Defines the main APP object with all shared state, getters, core navigation,
- * pills, and the Home tab renderer.
- * Loaded FIRST among all modules — other modules extend APP via Object.assign().
+/* modules/home.js — APP Core Object + Dashboard Home
+ * Defines the main APP object with all shared state, data getters,
+ * core navigation (goTab, renderTab), pills, and the Home tab renderer.
+ * All other modules extend APP via Object.assign() after this loads.
  */
 
 'use strict';
@@ -755,9 +755,6 @@ const APP = {
         <div>${this.renderNotepad()}</div>
       </div>`;
   },
+}; // end APP core
 
-
-// ── Flush the guard proxy once real APP is ready ──────────────────
-if (typeof window._APP_FLUSH === 'function') {
-  window._APP_FLUSH(APP);
-}
+// Note: _APP_FLUSH is called in js/init.js after all modules load

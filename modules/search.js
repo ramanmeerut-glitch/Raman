@@ -1,6 +1,6 @@
-/* modules/search.js — Search — openSearchBar, doSearch, setSearchFilter, renderSearchTab
- * Extends the APP object defined in modules/home.js.
- * Load order: after home.js, before rem-engine.js and notifications.js.
+/* modules/search.js — Global Search
+ * openSearchBar, doSearch, setSearchFilter, renderSearchTab
+ * Extends APP via Object.assign.
  */
 
 'use strict';
@@ -977,7 +977,4 @@ Object.assign(APP, {
         }
       });
   }
-};
-
-
-});
+}); // end search module
