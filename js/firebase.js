@@ -572,3 +572,4 @@ function _initFirebase() {
   window.fbConnected = true;
   console.log('[Firebase] Module loaded for project: raman2909-5996e');
 })();
+} // end _initFirebase
