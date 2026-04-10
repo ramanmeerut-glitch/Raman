@@ -582,25 +582,24 @@ Object.assign(APP, {
       return diff;
     }
 
-    // ── Status badge — ONLY based on trigger date ──
-    function statusBadge(dTrig,hasExpiry,completed){
-      if(completed) return `<span class="badge bg" style="background:#dcfce7;color:#166534;border-color:#90c8a0;">✅ Completed</span>`;
-      if(dTrig===null) return `<span class="badge bg" style="background:#e8f5e9;color:#1e7a45;">📅 Upcoming</span>`;
-      // ✅ Only show "Expired" if expiry date was actually set; otherwise show "Overdue"
-      if(dTrig<0)   return hasExpiry ? `<span class="badge br">❌ Expired ${Math.abs(dTrig)}d ago</span>` : `<span class="badge br">⏳ Overdue ${Math.abs(dTrig)}d</span>`;
-      if(dTrig===0) return `<span class="badge br">🔔 Due Today</span>`;
-      if(dTrig<=7)  return `<span class="badge by">⏰ In ${dTrig} day${dTrig>1?"s":""}</span>`;
-      if(dTrig<=30) return `<span class="badge bg">📅 In ${dTrig} days</span>`;
-      return `<span class="badge bg">✅ Upcoming — ${dTrig}d</span>`;
+    // ── Status badge — based on DUE DATE (not alert date) ──
+    // dDue = days until dueDate (negative = overdue, 0 = today, positive = future)
+    function statusBadge(dDue, completed){
+      if(completed) return '<span class="badge bg" style="background:#dcfce7;color:#166534;border-color:#90c8a0;">✅ Completed</span>';
+      if(dDue===null||dDue===undefined) return '<span class="badge bg" style="background:#e8f5e9;color:#1e7a45;">📅 Upcoming</span>';
+      if(dDue<0)  return '<span class="badge br" style="background:#fee2e2;color:#991b1b;border:1.5px solid #fca5a5;">🔴 Overdue '+Math.abs(dDue)+' day'+(Math.abs(dDue)>1?'s':'')+'</span>';
+      if(dDue===0)return '<span class="badge" style="background:#fff3cd;color:#854d0e;border:1.5px solid #fde68a;font-weight:800;">🔔 Due Today</span>';
+      if(dDue<=7) return '<span class="badge by" style="background:#fef9c3;color:#854d0e;border:1.5px solid #fde68a;">⏰ Due in '+dDue+' day'+(dDue>1?'s':'')+'</span>';
+      if(dDue<=30)return '<span class="badge" style="background:#dcfce7;color:#166534;border:1.5px solid #90c8a0;">🟢 Due in '+dDue+' days</span>';
+      return '<span class="badge bg" style="background:#e8f5e9;color:#1e7a45;">🟢 Due in '+dDue+' days</span>';
     }
 
-    // ── Border colour ──
-    function borderColor(dTrig,hasExpiry){
-      // ✅ Red border only if expiry is set and past
-      if(dTrig===null) return 'var(--bdr)';
-      if(dTrig<0)  return hasExpiry ? '#e05050' : 'var(--bdr)';
-      if(dTrig===0) return '#e09050';
-      if(dTrig<=7)  return '#d4b840';
+    // ── Border colour — based on DUE DATE ──
+    function borderColor(dDue){
+      if(dDue===null||dDue===undefined) return 'var(--bdr)';
+      if(dDue<0)   return '#e05050';
+      if(dDue===0) return '#e09050';
+      if(dDue<=7)  return '#d4b840';
       return 'var(--bdr)';
     }
 
@@ -615,7 +614,15 @@ Object.assign(APP, {
       const dTrig=dFromNow(trig);
       const dExp=(r.mode!=='recurring'&&r.exp)?dFromNow(r.exp):null;
       const completed=_doneIds.has(r.id)||!!r.completed;
-      allEntries.push({...r,_trig:trig,_dTrig:dTrig,_dDue:dFromNow(r.dueDate||r.exp||trig),_dExp:dExp,_src:'reminder',_category:'Other',completed});
+      var _rDue = r.dueDate||r.exp||trig;  // due date for status calc
+      var _rAlert = r.alertDate||trig;       // alert date for trigger
+      allEntries.push({...r,
+        _trig:_rAlert,         // alert date (trigger)
+        _dTrig:dFromNow(_rAlert),   // days to alert (for trigger timing)
+        _dDue:dFromNow(_rDue),      // days to due date (for STATUS)
+        _dueDate:_rDue,             // explicit due date string
+        _alertDate:_rAlert,         // explicit alert date string
+        _dExp:dExp,_src:'reminder',_category:'Other',completed});
     });
 
     // ── AUTO ADD: Medical follow-ups → allEntries ──
@@ -702,9 +709,11 @@ Object.assign(APP, {
     const rentEntries  = allEntries.filter(e=>e._src==='rent');
     const otherEntries = allEntries.filter(e=>e._src==='reminder');
     // Overdue/Due count = catOverdue + catToday + rent overdue
-    const due1w   = allEntries.filter(e=>e._dTrig!==null && e._dTrig>=0 && e._dTrig<=7 && e._src!=='rent').length;
-    const due30d  = allEntries.filter(e=>e._dTrig!==null && e._dTrig>7 && e._dTrig<=30 && e._src!=='rent').length;
-    const laterCnt= allEntries.filter(e=>e._dTrig!==null && e._dTrig>30 && e._src!=='rent').length;
+    // Count using _dDue (due date) so stats match the status badge
+    const _dd = e => (e._dDue!==undefined&&e._dDue!==null) ? e._dDue : e._dTrig;
+    const due1w   = allEntries.filter(e=>{ var d=_dd(e); return d!==null&&d>=0&&d<=7 &&e._src!=='rent';}).length;
+    const due30d  = allEntries.filter(e=>{ var d=_dd(e); return d!==null&&d>7 &&d<=30&&e._src!=='rent';}).length;
+    const laterCnt= allEntries.filter(e=>{ var d=_dd(e); return d!==null&&d>30       &&e._src!=='rent';}).length;
     const totalAll = allEntries.length;
     const urgCnt   = catOverdue.length + catToday.length + rentCards.length;
 
@@ -729,7 +738,7 @@ Object.assign(APP, {
       if(isRentAuto){
         const dO=e._daysOv||0;
         const bal=e._balanceAmt||0;
-        if(dO>0){bc='#e05050';badge=`<span class="badge br">🔴 ${dO}d Overdue</span>`;}
+        if(dO>0){bc='#e05050';badge=`<span class="badge br" style="background:#fee2e2;color:#991b1b;border:1.5px solid #fca5a5;">🔴 Overdue ${dO} day${dO>1?'s':''}</span>`;}
         else if((e._dTrig||0)===0){bc='#e09050';badge=`<span class="badge by">📋 Due Today</span>`;}
         else if((e._dTrig||0)>0){bc='var(--bdr)';badge=`<span class="badge ba">⏳ Upcoming</span>`;}
         else{bc='#e05050';badge=`<span class="badge br">🔴 Rent Pending</span>`;}
@@ -741,8 +750,10 @@ Object.assign(APP, {
         else if(dI===0){bc='#e09050';badge=`<span class="badge by">🤝 Due Today</span>`;}
         else{bc='#e05050';badge=`<span class="badge br">⚠️ Overdue ${Math.abs(dI)}d</span>`;}
       } else {
-        bc=e.completed?'#90c8a0':borderColor(dTrig, !!(e.exp));
-        badge=statusBadge(dTrig, !!(e.exp), e.completed);
+        // Status from dueDate (_dDue), not alert date
+        var _dDue = (e._dDue!==undefined) ? e._dDue : e._dTrig;
+        bc=e.completed?'#90c8a0':borderColor(_dDue);
+        badge=statusBadge(_dDue, e.completed);
       }
 
       // Recurring: next 3 occurrences
@@ -790,15 +801,29 @@ Object.assign(APP, {
           ${!isRecurring&&!isRentAuto&&!isLoanAuto&&!isMedical?(function(){
             var _bd  = parseInt(e.beforeDays||e.before||0);
             if(_bd>1440) _bd=Math.round(_bd/1440); if(!_bd||isNaN(_bd)) _bd=0;
-            var _due = e.dueDate||e.exp||'';
-            var _alt = e.alertDate||e.trigDate||'';
+            var _due = e._dueDate||e.dueDate||e.exp||'';
+            var _alt = e._alertDate||e.alertDate||'';
             var _same= !_due||!_alt||_due===_alt||_bd===0;
-            var _h   = '';
-            if(_due) _h+='<div style="margin-top:3px;">📅 <b>Due Date:</b> <span style="font-weight:700;">'+fD(_due)+'</span></div>';
+            var _dDue= e._dDue;
+            var _sc  = (_dDue===null||_dDue===undefined)?'var(--mut)':(_dDue<0?'#e05050':_dDue===0?'#e09050':'#1a7a45');
+            var _sl  = (_dDue===null||_dDue===undefined)?'':(_dDue<0?'('+Math.abs(_dDue)+'d overdue)':_dDue===0?'(today!)':'('+_dDue+'d away)');
+            var _h='';
+            _h+='<div style="display:flex;align-items:center;gap:8px;margin-top:4px;padding:4px 0;border-bottom:1px solid var(--bdr);">';
+            _h+='<span style="font-size:.62rem;color:var(--mut);min-width:72px;">📅 Due Date</span>';
+            _h+='<span style="font-weight:800;color:var(--txt);font-size:.78rem;">'+(_due?fD(_due):'—')+'</span>';
+            _h+='<span style="font-size:.62rem;font-weight:700;color:'+_sc+';">'+_sl+'</span>';
+            _h+='</div>';
             if(_same){
-              _h+='<div style="color:#6c757d;">🔔 <b>Alert Date:</b> Same day as due date</div>';
+              _h+='<div style="display:flex;align-items:center;gap:8px;padding:4px 0;">';
+              _h+='<span style="font-size:.62rem;color:var(--mut);min-width:72px;">🔔 Alert Date</span>';
+              _h+='<span style="color:#6c757d;font-size:.75rem;">Same day as due date</span>';
+              _h+='</div>';
             } else if(_alt){
-              _h+='<div style="color:#1565c0;">🔔 <b>Alert Date:</b> <span style="font-weight:700;">'+fD(_alt)+'</span> <span style="font-size:.85em;">('+_bd+' day'+(_bd>1?'s':'')+' before due date)</span></div>';
+              _h+='<div style="display:flex;align-items:center;gap:8px;padding:4px 0;">';
+              _h+='<span style="font-size:.62rem;color:var(--mut);min-width:72px;">🔔 Alert Date</span>';
+              _h+='<span style="font-weight:800;color:#1565c0;font-size:.78rem;">'+fD(_alt)+'</span>';
+              _h+=(_bd>0?'<span style="font-size:.62rem;color:#6c757d;">('+_bd+' day'+(_bd>1?'s':'')+' before due)</span>':'');
+              _h+='</div>';
             }
             return _h;
           })():''}
@@ -860,7 +885,7 @@ Object.assign(APP, {
           </div>
           <div style="text-align:right;flex-shrink:0;">
             ${badge}
-            <div style="font-size:.63rem;color:var(--mut);margin-top:2px;">${isRentAuto?(e._daysOv>0?e._daysOv+'d overdue':'Pending'):''}</div>
+            <div style="font-size:.63rem;color:var(--mut);margin-top:2px;">${isRentAuto&&e._daysOv>0?'💰 '+e._daysOv+'d overdue':''}</div>
           </div>
         </div>
         ${detailHtml}
@@ -995,8 +1020,8 @@ Object.assign(APP, {
 
       ${section('🔴 Overdue / Expired','#e05050',activeCatOverdue)}
       ${section('🔔 Due Today','#e09050',activeCatToday)}
-      ${section('⏰ Due in 1 Week','#c4900a',activeCatThisWeek.filter(e=>e._dTrig<=7))}
-      ${section('📅 Due in 30 Days','#1e7a45',activeCatThisWeek.filter(e=>e._dTrig>7).concat(activeCatThisMonth))}
+      ${section('⏰ Due in 1 Week','#c4900a',activeCatThisWeek.filter(e=>(e._dDue!==undefined?e._dDue:e._dTrig)<=7))}
+      ${section('📅 Due in 30 Days','#1e7a45',activeCatThisWeek.filter(e=>(e._dDue!==undefined?e._dDue:e._dTrig)>7).concat(activeCatThisMonth))}
       ${section('🔮 Due in 1 Year','#1760a0',activeCatUpcoming)}
       ${section('✅ Safe (Beyond 1yr)','#2e7d32',activeCatSafe)}
       
@@ -1509,7 +1534,13 @@ Object.assign(APP, {
       var _bd    = parseInt(r.beforeDays||r.before||0);
       if(_bd>1440) _bd=Math.round(_bd/1440); if(!_bd||isNaN(_bd)) _bd=0;
       var _altLabel = (!isRent&&_dueD!==_altD&&_bd>0)?(_altD+' ('+_bd+'d before)'):_altD;
-      return [name, type, _dueD||'—', _altLabel||'—', st.label, notes];
+      // Due Date = original due date | Alert Date = reminder trigger
+      var _pDue  = isRent?date:fD(r.dueDate||r.exp||'');
+      var _pAlt  = isRent?date:fD(r.alertDate||r.dueDate||r.exp||'');
+      var _pBd   = parseInt(r.beforeDays||r.before||0);
+      if(_pBd>1440) _pBd=Math.round(_pBd/1440); if(!_pBd||isNaN(_pBd)) _pBd=0;
+      var _pAltFull = (!isRent&&_pDue!==_pAlt&&_pBd>0)?(_pAlt+' ('+_pBd+'d before)'):(_pAlt||_pDue||'—');
+      return [name, type, _pDue||'—', _pAltFull||'—', st.label, notes];
     });
 
     _makePDF({
