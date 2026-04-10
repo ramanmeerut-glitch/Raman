@@ -156,24 +156,22 @@ const APP = {
     if(!r) return null;
     if(r.mode==='recurring') return r.nextTrigger||r.start||null;
     if(r.mode==='rent'||r.mode==='loan') return r._trigDate||null;
-    // ✅ Prefer reminderDate (= dueDate − before) when available
-    if(r.reminderDate && r.reminderDate !== r.trigDate) return r.reminderDate;
-    // Fallback: trigDate − beforeDays
-    if(r.trigDate) {
-      var bDays = parseInt(r.beforeDays||0);
-      if(!bDays && r.before) bDays = Math.round(parseInt(r.before)/1440);
-      if(bDays > 0) {
-        var dp = r.trigDate.split('-');
-        if(dp.length===3) {
-          var d = new Date(parseInt(dp[0]),parseInt(dp[1])-1,parseInt(dp[2]),0,0,0,0);
-          d.setDate(d.getDate()-bDays);
-          return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-        }
-      }
-      return r.trigDate;
-    }
-    if(!r.exp) return null;
-    return getReminderTriggerDate(r.exp, r.before||0);
+    // alertDate = pre-calculated on save (dueDate - beforeDays). Use directly, no math.
+    if(r.alertDate) return r.alertDate;
+    // trigDate in new saves already equals alertDate — use directly
+    if(r.trigDate) return r.trigDate;
+    // Legacy: derive from dueDate/exp minus beforeDays
+    var _base = r.dueDate || r.exp || null;
+    if(!_base) return null;
+    var _bp = _base.split('-');
+    if(_bp.length!==3) return null;
+    var _by=parseInt(_bp[0]),_bm=parseInt(_bp[1])-1,_bd=parseInt(_bp[2]);
+    if(isNaN(_by)||isNaN(_bm)||isNaN(_bd)) return null;
+    var _d = new Date(_by,_bm,_bd,0,0,0,0);
+    var _days = parseInt(r.beforeDays||r.before||0);
+    if(_days>1440) _days=Math.round(_days/1440);
+    if(_days>0) _d.setDate(_d.getDate()-_days);
+    return _d.getFullYear()+'-'+String(_d.getMonth()+1).padStart(2,'0')+'-'+String(_d.getDate()).padStart(2,'0');
   },
 
   // ── 3. Days from today to a date (negative = past) ──
@@ -221,7 +219,7 @@ const APP = {
       } else {
         dTrig=this._dFromNow(trig);
       }
-      const entry={...r,_trig:trig,_dTrig:dTrig};
+      const _dueDate=r.dueDate||r.exp||trig; const entry={...r,_trig:trig,_dTrig:dTrig,_dDue:this._dFromNow(_dueDate)};
       if(dTrig===null)             cats.upcoming.push(entry);
       else if(dTrig<0)             cats.overdue.push(entry);
       else if(dTrig===0)           cats.today.push(entry);

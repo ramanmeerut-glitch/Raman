@@ -788,13 +788,19 @@ Object.assign(APP, {
           </div>`:''}
           ${isRecurring?`<div>🔁 ${prdLabel[e.recurPeriod]||e.recurPeriod}${parseInt(e.recurBeforeVal||0)>0?' · Alert '+parseInt(e.recurBeforeVal)+' '+(e.recurBeforeUnit||'days')+' before':''}</div>`:''}
           ${!isRecurring&&!isRentAuto&&!isLoanAuto&&!isMedical?(function(){
-            var _bd=parseInt(e.beforeDays||e.before||0); if(_bd>1440) _bd=Math.round(_bd/1440); if(!_bd||isNaN(_bd)) _bd=0;
-            var _due=e.dueDate||e.exp||'', _alt=e.alertDate||e.trigDate||'';
-            if(_bd>0&&_due&&_alt&&_due!==_alt)
-              return '<div style="color:#1565c0;">🔔 Alert: '+fD(_alt)+' ('+_bd+' day'+(_bd>1?'s':'')+' before due)</div>'
-                    +'<div>📅 Due: '+fD(_due)+'</div>';
-            if(_due) return '<div>📅 Date: '+fD(_due)+'</div>';
-            return '';
+            var _bd  = parseInt(e.beforeDays||e.before||0);
+            if(_bd>1440) _bd=Math.round(_bd/1440); if(!_bd||isNaN(_bd)) _bd=0;
+            var _due = e.dueDate||e.exp||'';
+            var _alt = e.alertDate||e.trigDate||'';
+            var _same= !_due||!_alt||_due===_alt||_bd===0;
+            var _h   = '';
+            if(_due) _h+='<div style="margin-top:3px;">📅 <b>Due Date:</b> <span style="font-weight:700;">'+fD(_due)+'</span></div>';
+            if(_same){
+              _h+='<div style="color:#6c757d;">🔔 <b>Alert Date:</b> Same day as due date</div>';
+            } else if(_alt){
+              _h+='<div style="color:#1565c0;">🔔 <b>Alert Date:</b> <span style="font-weight:700;">'+fD(_alt)+'</span> <span style="font-size:.85em;">('+_bd+' day'+(_bd>1?'s':'')+' before due date)</span></div>';
+            }
+            return _h;
           })():''}
           ${e.notes?`<div>📝 ${APP.autoLink(e.notes)}</div>`:''}
           ${(e.alertHour||e.alertMin)?`<div style="font-size:.72rem;color:#1565c0;margin-top:2px;">🔔 Reminder at ${APP._fmt12hr(e.alertHour||'10',e.alertMin||'00')}</div>`:''}
@@ -837,13 +843,18 @@ Object.assign(APP, {
               var _alert = e.alertDate||e.trigDate||e._trig||'';
               var _bd    = parseInt(e.beforeDays||e.before||0);
               if(_bd>1440) _bd=Math.round(_bd/1440); if(!_bd||isNaN(_bd)) _bd=0;
-              var _hasDue=_due&&_due.length===10, _hasAlt=_alert&&_alert.length===10;
-              if(_hasDue&&_hasAlt&&_due!==_alert)
-                return '<div style="font-size:.63rem;font-weight:700;margin-top:2px;">📅 Due: '+fD(_due)+'</div>'
-                      +'<div style="font-size:.62rem;color:#1565c0;margin-top:1px;">🔔 Alert: '+fD(_alert)+(_bd>0?' ('+_bd+' day'+(_bd>1?'s':'')+' before)':'')+'</div>';
-              if(_hasDue) return '<div style="font-size:.62rem;color:var(--mut);margin-top:1px;">📅 '+fD(_due)+'</div>';
-              if(_hasAlt) return '<div style="font-size:.62rem;color:var(--mut);margin-top:1px;">🔔 '+fD(_alert)+'</div>';
-              return '';
+              var _hasDue=_due&&_due.length===10;
+              var _hasAlt=_alert&&_alert.length===10;
+              var _same  =_due===_alert||_bd===0;
+              // Always show Due Date
+              var _html='<div style="font-size:.63rem;font-weight:700;color:var(--txt);margin-top:2px;">📅 <b>Due Date:</b> '+(_hasDue?fD(_due):'—')+'</div>';
+              // Always show Alert Date
+              if(_same){
+                _html+='<div style="font-size:.62rem;color:#6c757d;margin-top:1px;">🔔 <b>Alert:</b> Same day</div>';
+              } else if(_hasAlt){
+                _html+='<div style="font-size:.62rem;color:#1565c0;margin-top:1px;">🔔 <b>Alert:</b> '+fD(_alert)+' ('+_bd+' day'+(_bd>1?'s':'')+' before)</div>';
+              }
+              return _html;
             })():''}
             ${e.snoozedUntil?`<div style="font-size:.6rem;color:#b06000;margin-top:1px;">⏰ Snoozed until ${(function(){var d=new Date(e.snoozedUntil);return d.toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});})()}</div>`:''}
           </div>
@@ -1492,7 +1503,13 @@ Object.assign(APP, {
       const amt  = isRent&&r._balanceAmt?'Rs.'+Number(r._balanceAmt).toLocaleString('en-IN'):(r.exp&&!isRent?fD(r.exp):'—');
       const rawNotes = stripE(r.notes||'');
       const notes = rawNotes.slice(0,80)+(rawNotes.length>80?'...':'');
-      return [name, type, date, amt, st.label, notes];
+      // Due Date = original due/expiry date; Alert Date = trigDate (notification date)
+      var _dueD  = isRent?date:(fD(r.dueDate||r.exp||''));
+      var _altD  = isRent?date:(fD(r.alertDate||r.trigDate||r.exp||''));
+      var _bd    = parseInt(r.beforeDays||r.before||0);
+      if(_bd>1440) _bd=Math.round(_bd/1440); if(!_bd||isNaN(_bd)) _bd=0;
+      var _altLabel = (!isRent&&_dueD!==_altD&&_bd>0)?(_altD+' ('+_bd+'d before)'):_altD;
+      return [name, type, _dueD||'—', _altLabel||'—', st.label, notes];
     });
 
     _makePDF({
@@ -1500,7 +1517,7 @@ Object.assign(APP, {
       title: titleSuffix,
       subtitle: 'Total: '+filtered.length+' | Overdue: '+overdueCount+' | Due Today: '+todayCount+' | Upcoming: '+upcomingCount+' | '+todayDMY(),
       orientation: 'landscape',
-      columns: ['Name','Type','Alert Date','Expiry/Amt','Status','Notes'],
+      columns: ['Name','Type','Due Date','Alert Date','Status','Notes'],
       rows,
       headerColor: [44,111,173],
       // A4 landscape: 297mm - (14mm × 2) margins = 269mm usable
