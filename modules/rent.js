@@ -1517,17 +1517,6 @@ Object.assign(APP, {
                   ${!isRef?`<button onclick="APP.generateReceipt('${p.id}')" style="background:#e8f5e9;color:#1a7a45;border:1.5px solid #90c8a0;cursor:pointer;font-size:.68rem;padding:2px 6px;border-radius:5px;margin-left:3px;font-weight:700;">🧾</button>`:''}
                 </td>
               </tr>`);
-                <td style="padding-left:20px;font-size:.72rem;color:var(--mut);">↳ ${isRef?'↩️ Refund':'💰 Payment'}</td>
-                <td class="mono" style="font-size:.72rem;">${payDate}<br><span style="font-size:.58rem;color:var(--mut);">Pay Date</span></td>
-                <td class="mono" style="font-size:.72rem;color:var(--mut);">${mLabel}<br><span style="font-size:.58rem;">Rent Month</span></td>
-                <td></td>
-                <td class="mono" style="font-weight:700;color:${col};">${isRef?'− ':'+ '}₹${fmt(p.amount)}</td>
-                <td style="font-size:.72rem;color:var(--mut);">${p.mode||'Cash'}${p.ref?' · '+p.ref.slice(0,15):''}${p.note?'<br><span style="font-size:.65rem;">'+p.note.slice(0,30)+'</span>':''}</td>
-                <td>${timingBadge}</td>
-                <td style="white-space:nowrap;"><button onclick="APP.openEditPayModal('${p.id}')" style="background:none;border:1px solid var(--bdr2);color:var(--mut);cursor:pointer;font-size:.7rem;padding:2px 6px;border-radius:5px;">✏️</button>${!isRef?`<button onclick="APP.generateReceipt('${p.id}')" style="background:#e8f5e9;color:#1a7a45;border:1.5px solid #90c8a0;cursor:pointer;font-size:.68rem;padding:2px 6px;border-radius:5px;margin-left:3px;font-weight:700;" title="Generate Receipt">🧾</button>`:''}</td>
-              </tr>`);
-            });
-          });
 
           // Download buttons — same style as Finance tab
           const tenDlBtns = `<div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
