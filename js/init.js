@@ -7,10 +7,11 @@
 
 // Flush the guard proxy — real APP is now fully assembled
 if (typeof window._APP_FLUSH === 'function') {
-  window._APP_FLUSH(APP);
+  var _r = window._REAL_APP || APP;
+  window._APP_FLUSH(_r);
   console.log('[init] APP ready — proxy flushed');
 } else {
-  window.APP = APP;
+  window.APP = window._REAL_APP || APP;
 }
 
 // Keyboard shortcut: Ctrl+F / Ctrl+K → open search
