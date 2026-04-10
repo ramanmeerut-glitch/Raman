@@ -451,6 +451,8 @@ Object.assign(APP, {
     sv('pym_amt',totalOutstanding>0?totalOutstanding:t.rent);
     svDate('pym_date',now.toISOString().split('T')[0]);
     sv('pym_ref','');sv('pym_note','');sv('pym_mode','NEFT');
+    // Clear TDS fields
+    try{sv('pym_tds_amt','0');sv('pym_tds_ref','');const tsel=document.getElementById('pym_tds_status');if(tsel)tsel.value='pending';const tprev=document.getElementById('pym_tds_preview');if(tprev)tprev.style.display='none';const tdate=document.getElementById('pym_tds_date');if(tdate)tdate.value='';}catch(e){}
     sc('pym_chkRent',true);sc('pym_chkMaint',false);sc('pym_chkOther',false);
     // Init date picker — rebuild every time modal opens so date is fresh
     const _pdw = document.getElementById('pym_date_wrap');
@@ -490,10 +492,12 @@ Object.assign(APP, {
         ⚠️ Edit karein ya 🗑 Delete karein — Delete button andar hai
       </div>`;
     document.getElementById('payM_bal').innerHTML='';
-    sv('pym_amt',p.amount);
+    sv('pym_amt',p.bankAmt||p.amount);
     svDate('pym_date',p.date);
     sv('pym_ref',p.ref||'');
     sv('pym_note',p.note||'');
+    // Restore TDS fields
+    try{sv('pym_tds_amt',p.tdsAmt||'0');sv('pym_tds_ref',p.tdsRef||'');const tsel=document.getElementById('pym_tds_status');if(tsel)tsel.value=p.tdsStatus||'pending';const tdate=document.getElementById('pym_tds_date');if(tdate)tdate.value=p.tdsDate||p.date||'';}catch(e){}
     sc('pym_chkRent',p.incRent!==false);
     sc('pym_chkMaint',!!p.incMaint);
     sc('pym_chkOther',false);
@@ -606,12 +610,23 @@ Object.assign(APP, {
 
       let ps = [...this.payments];
 
+      // TDS fields — separate from bank payment
+      const tdsAmt   = parseFloat((v('pym_tds_amt')||'').replace(/,/g,''))||0;
+      const tdsDate  = vDate('pym_tds_date') || date;
+      const tdsRef   = v('pym_tds_ref') || '';
+      const tdsStatus= (document.getElementById('pym_tds_status')||{}).value || 'pending';
+
       const payData = {
-        amount: Number(amt),
+        amount:    Number(amt),        // bank payment amount
+        bankAmt:   Number(amt),        // explicit bank alias
+        tdsAmt,                        // TDS deduction (separate)
+        tdsDate,                       // TDS deduction date
+        tdsRef,                        // TDS challan / reference
+        tdsStatus,                     // 'pending' | 'verified'
         date,
         rentForMonth,
-        mode: v('pym_mode') || 'Cash',
-        ref: v('pym_ref') || '',
+        mode: v('pym_mode') || 'NEFT',
+        ref:  v('pym_ref') || '',
         note: v('pym_note') || '',
         ptype,
         incRent: true,
@@ -783,6 +798,24 @@ Object.assign(APP, {
 
   setRentSub(s){this.rentSub=s;this.renderRent();},
 
+  // TDS preview — shows Bank + TDS = Total in payment modal
+  _updateTdsPreview(){
+    try{
+      const bank = parseFloat((document.getElementById('pym_amt')||{}).value||0)||0;
+      const tds  = parseFloat((document.getElementById('pym_tds_amt')||{}).value||0)||0;
+      const prev = document.getElementById('pym_tds_preview');
+      if(!prev) return;
+      if(tds>0){
+        prev.style.display='block';
+        prev.innerHTML='🏦 Bank: ₹'+bank.toLocaleString('en-IN')+
+          ' + TDS: ₹'+tds.toLocaleString('en-IN')+
+          ' = <b>Total Settled: ₹'+(bank+tds).toLocaleString('en-IN')+'</b>';
+      } else {
+        prev.style.display='none';
+      }
+    }catch(e){}
+  },
+
   // ─── RENT LEDGER ENGINE (v17 — Correct invoice/due logic) ─────────────────
   //
   // KEY FORMULA:
@@ -863,10 +896,16 @@ Object.assign(APP, {
         if(p.date) return p.date.slice(0,7) === monthKey;
         return false;
       });
-      // Net received = payments - refunds (refunds have ptype='refund')
-      const received=monthPays.reduce((s,p)=>{
-        return p.ptype==='refund' ? s-Number(p.amount) : s+Number(p.amount);
+      // Net received = bank payments + TDS - refunds
+      const bankReceived = monthPays.reduce((s,p)=>{
+        if(p.ptype==='refund') return s - Number(p.bankAmt||p.amount);
+        return s + Number(p.bankAmt||p.amount);
       },0);
+      const tdsReceived = monthPays.reduce((s,p)=>{
+        if(p.ptype==='refund') return s;
+        return s + Number(p.tdsAmt||0);
+      },0);
+      const received = bankReceived + tdsReceived; // total settled
 
       // Has invoice been generated yet?
       const invoiceGenerated=now>=invoiceDate;
@@ -894,6 +933,7 @@ Object.assign(APP, {
 
       return{
         year,month,monthlyTotal,received,
+        bankReceived,tdsReceived,
         balance:Math.max(0,runningBalance),
         payments:monthPays,
         invoiceDate,dueDate,periodStart,periodEnd,
@@ -902,15 +942,15 @@ Object.assign(APP, {
       };
     });
 
-    // Total received = all payments minus refunds
-    const totalReceived=allPayments.reduce((s,p)=>{
-      return p.ptype==='refund' ? s-Number(p.amount) : s+Number(p.amount);
-    },0);
+    // Total received = bank + TDS - refunds
+    const totalBank=allPayments.reduce((s,p)=>p.ptype==='refund'?s-Number(p.bankAmt||p.amount):s+Number(p.bankAmt||p.amount),0);
+    const totalTds =allPayments.reduce((s,p)=>p.ptype==='refund'?s:s+Number(p.tdsAmt||0),0);
+    const totalReceived = totalBank + totalTds;
     // Outstanding = only charged months with positive balance
     const totalBalance=Math.max(0,runningBalance);
     const billedMonths=ledger.filter(m=>m.charged).length;
 
-    const result={months:ledger,totalExpected,totalReceived,totalBalance,monthCount:billedMonths,allMonths:months.length};
+    const result={months:ledger,totalExpected,totalReceived,totalBank,totalTds,totalBalance,monthCount:billedMonths,allMonths:months.length};
     this._ledgerCache[cacheKey]=result; // Bug5 fix: store in cache
     return result;
   },
@@ -1416,17 +1456,20 @@ Object.assign(APP, {
             else if(mo.status==='due'){mStatusBadge=mo.received>0?'<span class="badge bo" style="font-size:.65rem">Partial</span>':'<span class="badge by" style="font-size:.65rem">Due</span>';mRowBg='background:#fffbee';}
             else if(mo.status==='overdue'){mStatusBadge=mo.received>0?'<span class="badge bo" style="font-size:.65rem">⚠️ Part</span>':'<span class="badge br" style="font-size:.65rem">🔴 Overdue</span>';mRowBg='background:#fff5f5';}
 
-            // Month header row — shows charge + balance
+            // Month header row — Rent | Bank | TDS | Balance
+            var _moTds=(mo.tdsReceived||0), _moBnk=(mo.bankReceived||0);
             allPayRows.push(`<tr style="border-top:2px solid var(--bdr2);${mRowBg}">
-              <td style="font-weight:800;font-size:.82rem;white-space:nowrap;">
-                ${mLabel}${mo.isCurrent?' <span class="badge ba" style="font-size:.58rem">Now</span>':''}
-              </td>
+              <td style="font-weight:800;font-size:.82rem;white-space:nowrap;">${mLabel}${mo.isCurrent?' <span class="badge ba" style="font-size:.58rem">Now</span>':''}</td>
               <td class="mono" style="font-size:.72rem;color:var(--mut);">${fmt2(mo.invoiceDate)}<br><span style="font-size:.58rem">Invoice</span></td>
               <td class="mono" style="font-size:.72rem;color:var(--mut);">${fmt2(mo.dueDate)}<br><span style="font-size:.58rem">Due</span></td>
               <td class="mono" style="font-weight:700;">${mo.charged?'₹'+fmt(mo.monthlyTotal):'<span style="color:var(--mut)">—</span>'}</td>
-              <td class="mono" style="font-weight:700;color:var(--grn);">${mo.received>0?'₹'+fmt(mo.received):'<span style="color:var(--mut)">—</span>'}</td>
-              <td class="mono" style="font-weight:700;color:${mo.runningBalance>0?'var(--red)':'var(--grn)'};">
-                ${mo.charged?(mo.runningBalance>0?'₹'+fmt(mo.runningBalance):'<span style="color:var(--grn)">✓</span>'):'<span style="color:var(--mut)">—</span>'}
+              <td class="mono" style="font-size:.72rem;">
+                ${_moBnk>0?'<div style="color:var(--grn);font-weight:700;">🏦 ₹'+fmt(_moBnk)+'</div>':''}
+                ${_moTds>0?'<div style="color:#7c3aed;font-weight:700;">TDS ₹'+fmt(_moTds)+'</div>':''}
+                ${(_moBnk+_moTds)===0?'<span style="color:var(--mut)">—</span>':''}
+              </td>
+              <td class="mono" style="font-weight:700;color:${mo.runningBalance>0?'var(--red)':'var(--grn)'};"> 
+                ${mo.charged?(mo.runningBalance>0?'₹'+fmt(mo.runningBalance):'<span style="color:var(--grn)">✓ Clear</span>'):'<span style="color:var(--mut)">—</span>'}
               </td>
               <td>${mStatusBadge}</td>
               <td><div style="display:flex;gap:3px;flex-wrap:wrap;">
@@ -1454,7 +1497,26 @@ Object.assign(APP, {
                 else if(pDateObj<=mo.dueDate) timingBadge='<span style="background:#e8f5e9;color:#2e7d32;border-radius:4px;padding:1px 5px;font-size:.6rem;font-weight:700;">On-time</span>';
                 else timingBadge='<span style="background:#fff3e0;color:#e65100;border-radius:4px;padding:1px 5px;font-size:.6rem;font-weight:700;">Late</span>';
               }
+              var _pBank=Number(p.bankAmt||p.amount), _pTds=Number(p.tdsAmt||0);
+              var _tdsB=_pTds>0?(p.tdsStatus==='verified'?'<span style="background:#ede9fe;color:#5b21b6;border:1px solid #c4b5fd;border-radius:4px;padding:1px 4px;font-size:.58rem;font-weight:700;">TDS✓</span>':'<span style="background:#fef9c3;color:#854d0e;border:1px solid #fde68a;border-radius:4px;padding:1px 4px;font-size:.58rem;font-weight:700;">TDS⏳</span>'):'';
               allPayRows.push(`<tr style="background:${bg};">
+                <td style="padding-left:20px;font-size:.72rem;color:var(--mut);">↳ ${isRef?'↩️ Refund':'💰 Payment'}</td>
+                <td class="mono" style="font-size:.72rem;">${payDate}<br><span style="font-size:.58rem;color:var(--mut);">Pay Date</span></td>
+                <td class="mono" style="font-size:.72rem;color:var(--mut);">${mLabel}<br><span style="font-size:.58rem;">Rent Month</span></td>
+                <td></td>
+                <td class="mono" style="font-size:.72rem;">
+                  ${!isRef?`<div style="color:var(--grn);font-weight:700;">🏦 ₹${fmt(_pBank)}</div>`:''}
+                  ${_pTds>0&&!isRef?`<div style="color:#7c3aed;font-weight:700;">TDS ₹${fmt(_pTds)}${p.tdsRef?' ('+p.tdsRef.slice(0,10)+')':''}</div>`:''}
+                  ${_pTds>0&&!isRef?_tdsB:''}
+                  ${isRef?`<div style="color:var(--red);font-weight:700;">− ₹${fmt(_pBank)}</div>`:''}
+                </td>
+                <td style="font-size:.72rem;color:var(--mut);">${p.mode||'NEFT'}${p.ref?' · '+p.ref.slice(0,12):''}${p.note?'<br><span style="font-size:.65rem;">'+p.note.slice(0,25)+'</span>':''}</td>
+                <td>${timingBadge}</td>
+                <td style="white-space:nowrap;">
+                  <button onclick="APP.openEditPayModal('${p.id}')" style="background:none;border:1px solid var(--bdr2);color:var(--mut);cursor:pointer;font-size:.7rem;padding:2px 6px;border-radius:5px;">✏️</button>
+                  ${!isRef?`<button onclick="APP.generateReceipt('${p.id}')" style="background:#e8f5e9;color:#1a7a45;border:1.5px solid #90c8a0;cursor:pointer;font-size:.68rem;padding:2px 6px;border-radius:5px;margin-left:3px;font-weight:700;">🧾</button>`:''}
+                </td>
+              </tr>`);
                 <td style="padding-left:20px;font-size:.72rem;color:var(--mut);">↳ ${isRef?'↩️ Refund':'💰 Payment'}</td>
                 <td class="mono" style="font-size:.72rem;">${payDate}<br><span style="font-size:.58rem;color:var(--mut);">Pay Date</span></td>
                 <td class="mono" style="font-size:.72rem;color:var(--mut);">${mLabel}<br><span style="font-size:.58rem;">Rent Month</span></td>
@@ -1518,12 +1580,13 @@ Object.assign(APP, {
                   <div style="background:var(--dim);border-radius:8px;padding:8px 11px;"><div class="pill-lbl">Monthly Rent</div><div style="font-size:.8rem;font-weight:600;font-family:'JetBrains Mono',monospace">₹${fmt(selTen.rent)}</div></div>
                   <div style="background:#f0faf5;border-radius:8px;padding:8px 11px;"><div class="pill-lbl">Total Expected</div><div style="font-size:.8rem;font-weight:600;font-family:'JetBrains Mono',monospace">₹${fmt(ledger.totalExpected)}</div></div>
                   <div style="background:#f0faf5;border-radius:8px;padding:8px 11px;"><div class="pill-lbl">Total Received</div><div style="font-size:.8rem;font-weight:600;font-family:'JetBrains Mono',monospace;color:var(--grn)">₹${fmt(ledger.totalReceived)}</div></div>
+                  ${ledger.totalTds>0?`<div style="background:#f5f3ff;border-radius:8px;padding:8px 11px;"><div class="pill-lbl" style="color:#7c3aed;">TDS Deducted</div><div style="font-size:.8rem;font-weight:600;font-family:'JetBrains Mono',monospace;color:#7c3aed">₹${fmt(ledger.totalTds)}</div></div>`:''}
                   <div style="background:${ledger.totalBalance>0?'#fff5f5':'#f0faf5'};border-radius:8px;padding:8px 11px;"><div class="pill-lbl">Outstanding</div><div style="font-size:.82rem;font-weight:700;font-family:'JetBrains Mono',monospace;color:${ledger.totalBalance>0?'var(--red)':'var(--grn)'}">₹${ledger.totalBalance>0?fmt(ledger.totalBalance):'✓ Clear'}</div></div>
                 </div>
               </div>
             </div>
             <div class="tbl-wrap"><table>
-              <thead><tr><th>Month / Entry</th><th>Invoice Date</th><th>Rent Month / Pay Date</th><th>Charged</th><th>Amount</th><th>Mode / Note</th><th>Status</th><th>Action</th></tr></thead>
+              <thead><tr><th>Month / Entry</th><th>Invoice Date</th><th>Rent Month / Pay Date</th><th>Charged</th><th>🏦 Bank · TDS</th><th>Mode / Note</th><th>Status</th><th>Action</th></tr></thead>
               <tbody>${allPayRows.join('')||'<tr><td colspan="8"><div class="empty">No data in range</div></td></tr>'}</tbody>
             </table></div>`;
         }
