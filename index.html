@@ -236,7 +236,7 @@
           <label>Amount (₹) *</label>
           <input id="kbe_amount" type="number" inputmode="decimal" placeholder="0"
             style="font-size:1.4rem;font-weight:800;text-align:center;background:var(--dim);border:2px solid var(--bdr2);border-radius:10px;padding:10px;width:100%;box-sizing:border-box;outline:none;color:var(--txt);"
-            onfocus="this.style.borderColor='var(--acc)'" onblur="this.style.borderColor='var(--bdr2)'">
+            onfocus="this.style.borderColor='var(--acc)'" onblur="this.style.borderColor='var(--bdr2)'" oninput="APP._updateTdsPreview()">
         </div>
         <div class="fg"><label>📅 Date</label><div id="kbe_date_wrap"></div></div>
         <div class="fg"><label>📝 Note</label><input id="kbe_note" placeholder="e.g. Rent, Loan, Return..."></div>
@@ -514,10 +514,10 @@
 
       <!-- Amount — prominent -->
       <div style="text-align:center;margin-bottom:14px;">
-        <div id="pym_amt_label" style="font-size:.62rem;text-transform:uppercase;letter-spacing:.08em;color:var(--mut);font-weight:700;margin-bottom:5px;">AMOUNT (₹) <span style="color:#e53935;font-weight:900;">★ Mandatory</span></div>
+        <div id="pym_amt_label" style="font-size:.62rem;text-transform:uppercase;letter-spacing:.08em;color:var(--mut);font-weight:700;margin-bottom:5px;">🏦 BANK AMOUNT (₹) <span style="color:#e53935;font-weight:900;">★ Mandatory</span></div>
         <input id="pym_amt" type="number" inputmode="decimal" placeholder="0"
           style="width:100%;text-align:center;font-size:1.7rem;font-weight:900;font-family:'JetBrains Mono',monospace;color:var(--txt);background:var(--dim);border:2px solid var(--bdr2);border-radius:12px;padding:10px 14px;outline:none;box-sizing:border-box;transition:border-color .15s;"
-          onfocus="this.style.borderColor='var(--acc)'" onblur="this.style.borderColor='var(--bdr2)'">
+          onfocus="this.style.borderColor='var(--acc)'" onblur="this.style.borderColor='var(--bdr2)'" oninput="APP._updateTdsPreview()">
       </div>
 
       <div class="fgrid">
@@ -533,6 +533,36 @@
         <div class="fg"><label>🔖 Ref / UTR Number <span style="color:var(--mut);font-size:.65rem;">(optional)</span></label><input id="pym_ref" placeholder="Transaction reference"></div>
         <div class="full fg"><label>📝 Note <span style="color:var(--mut);font-size:.65rem;">(optional)</span></label><input id="pym_note" placeholder="e.g. March 2026 rent, Excess refund…"></div>
         <div class="full fg"><label>📎 Receipt <span style="color:var(--mut);font-size:.65rem;">(optional)</span></label><div id="fu_pay_receipt_wrap"></div></div>
+
+        <!-- TDS Deduction — separate from bank payment -->
+        <div style="background:#f5f3ff;border:1.5px solid #c4b5fd;border-radius:10px;padding:11px 13px;margin-top:6px;">
+          <div style="font-size:.72rem;font-weight:800;color:#5b21b6;margin-bottom:8px;display:flex;align-items:center;gap:6px;">
+            🏛️ TDS DEDUCTION
+            <span style="font-size:.62rem;color:#7c3aed;font-weight:400;">(optional — kept separate from bank payment)</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+            <div class="fg">
+              <label style="color:#5b21b6;">TDS AMOUNT (₹)</label>
+              <input id="pym_tds_amt" type="number" min="0" step="0.01" placeholder="0" style="border-color:#c4b5fd;" oninput="APP._updateTdsPreview()">
+            </div>
+            <div class="fg">
+              <label style="color:#5b21b6;">TDS DEDUCTION DATE</label>
+              <input id="pym_tds_date" type="date" style="border-color:#c4b5fd;">
+            </div>
+            <div class="fg">
+              <label style="color:#5b21b6;">TDS CHALLAN / REF NO.</label>
+              <input id="pym_tds_ref" placeholder="Challan No / UTR">
+            </div>
+            <div class="fg">
+              <label style="color:#5b21b6;">TDS STATUS</label>
+              <select id="pym_tds_status" style="border-color:#c4b5fd;">
+                <option value="pending">⏳ Pending Verification</option>
+                <option value="verified">✅ Verified</option>
+              </select>
+            </div>
+          </div>
+          <div id="pym_tds_preview" style="font-size:.72rem;color:#5b21b6;margin-top:6px;padding:5px 8px;background:#ede9fe;border-radius:6px;display:none;"></div>
+        </div>
       </div>
 
       <!-- Current balance summary -->
@@ -1046,7 +1076,7 @@
         <div style="font-size:.62rem;text-transform:uppercase;letter-spacing:.08em;color:var(--mut);font-weight:700;margin-bottom:5px;">AMOUNT (₹) *</div>
         <input id="exm_amt" type="number" inputmode="decimal" placeholder="0"
           style="width:100%;text-align:center;font-size:1.9rem;font-weight:900;font-family:'JetBrains Mono',monospace;color:var(--txt);background:var(--dim);border:2px solid var(--bdr2);border-radius:12px;padding:10px 14px;outline:none;box-sizing:border-box;transition:border-color .15s;"
-          onfocus="this.style.borderColor='var(--acc)'" onblur="this.style.borderColor='var(--bdr2)'">
+          onfocus="this.style.borderColor='var(--acc)'" onblur="this.style.borderColor='var(--bdr2)'" oninput="APP._updateTdsPreview()">
       </div>
 
       <!-- Category Dropdown (compact) -->
