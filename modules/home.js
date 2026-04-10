@@ -528,14 +528,16 @@ const APP = {
         return va-vb;
       });
 
-    // ── STATUS BADGE & COLORS (same as renderReminders) ──
-    function statusInfo(dTrig,completed){
+    // ── STATUS BADGE & COLORS — based on TASK DATE (dDue), not alert date ──
+    // dDue = days until task/due date; negative = overdue
+    function statusInfo(dDue, completed){
       if(completed)       return{label:'✅ Completed',bg:'#dcfce7',tc:'#166534',rowBg:'#f0fdf4'};
-      if(dTrig===null)    return{label:'Upcoming',bg:'#e8f5e9',tc:'#1e7a45',rowBg:'#f0fdf4'};
-      if(dTrig<0)         return{label:Math.abs(dTrig)+'d Overdue',bg:'#fcebeb',tc:'#a32d2d',rowBg:'#fff5f5'};
-      if(dTrig===0)       return{label:'Due Today',bg:'#fff0cc',tc:'#854f0b',rowBg:'#fffaee'};
-      if(dTrig<=7)        return{label:'Due in '+dTrig+'d',bg:'#fff8ee',tc:'#854f0b',rowBg:'#fffcf5'};
-      return               {label:'Upcoming '+dTrig+'d',bg:'#e8f5e9',tc:'#1e7a45',rowBg:''};
+      if(dDue===null||dDue===undefined) return{label:'Upcoming',bg:'#e8f5e9',tc:'#1e7a45',rowBg:'#f0fdf4'};
+      var n=Math.abs(dDue);
+      if(dDue<0)  return{label:'🔴 Overdue '+n+' day'+(n>1?'s':''),bg:'#fee2e2',tc:'#991b1b',rowBg:'#fff5f5'};
+      if(dDue===0)return{label:'🔔 Due Today',bg:'#fef9c3',tc:'#854d0e',rowBg:'#fffaee'};
+      if(dDue<=7) return{label:'⏰ Due in '+dDue+' day'+(dDue>1?'s':''),bg:'#fef9c3',tc:'#854d0e',rowBg:'#fffcf5'};
+      return              {label:'🟢 Due in '+dDue+' days',bg:'#dcfce7',tc:'#166534',rowBg:''};
     }
 
     const typeIconMap={'🛂 Passport':'🛂','🚗 Driving Licence':'🚗','🛡️ Insurance':'🛡️','📋 Rent Agreement':'📋',
@@ -553,7 +555,9 @@ const APP = {
       const borderColorFn=(d)=>d===null||d<0?'#e05050':d===0?'#e09050':d<=7?'#d4b840':'#90c8a0';
       const blLabelA={'1':'1d','3':'3d','7':'1wk','15':'15d','30':'1mo','60':'2mo','90':'3mo','180':'6mo','365':'1yr'};
       const rows=allAlertRows.map(e=>{
-        const si=statusInfo(e._dTrig, !!(e.completed));
+        // Use task date (_dDue) for status; fall back to _dTrig for legacy entries
+        const _eDue = (e._dDue!==undefined&&e._dDue!==null) ? e._dDue : e._dTrig;
+        const si=statusInfo(_eDue, !!(e.completed));
         const icon=typeIconMap[e.type]||'📌';
         const isRent=e._src==='rent'||e.mode==='rent';
         const isLoan=e.mode==='loan';
@@ -592,18 +596,25 @@ const APP = {
         } else {
           trigDisp=fD(e._trig)||'—';
         }
-        const remDateCell=`<td style="padding:7px 8px;font-family:'JetBrains Mono',monospace;font-size:.72rem;color:var(--acc);white-space:nowrap;">${trigDisp||'—'}</td>`;
+        // Alert Date with label
+        const remDateCell=`<td style="padding:7px 8px;font-family:'JetBrains Mono',monospace;font-size:.72rem;white-space:nowrap;">
+          <span style="color:var(--acc);font-weight:700;">${trigDisp||'—'}</span>
+          <div style="font-size:.58rem;color:var(--mut);opacity:.8;">Alert Date</div>
+        </td>`;
 
-        // 4. EXPIRY / AMOUNT
-        const expVal=isRent?fmt(e.bal||0):isLoan?fmt(e._outstanding||e.bal||0):e.exp?fD(e.exp):'—';
-        const expLabel=isRent||isLoan?'Amt':'Expiry';
-        const expDateCell=`<td style="padding:7px 8px;font-family:'JetBrains Mono',monospace;font-size:.72rem;color:var(--mut);white-space:nowrap;">${expVal}<div style="font-size:.58rem;opacity:.7;">${expLabel}</div></td>`;
+        // 4. TASK DATE (for reminder) or AMOUNT (for rent/loan)
+        var _taskDateStr = e.taskDate||e.dueDate||e.exp||'';
+        const expVal=isRent?fmt(e.bal||0):isLoan?fmt(e._outstanding||e.bal||0):(_taskDateStr?fD(_taskDateStr):'—');
+        const expLabel=isRent||isLoan?'Amt':'Task Date';
+        const expColor=isRent||isLoan?'#e05050':'var(--acc)';
+        const expDateCell=`<td style="padding:7px 8px;font-family:'JetBrains Mono',monospace;font-size:.72rem;color:${expColor};white-space:nowrap;">${expVal}<div style="font-size:.58rem;color:var(--mut);opacity:.8;">${expLabel}</div></td>`;
 
-        // 5. DAYS INFO
-        const d=e._dTrig;
+        // 5. DAYS INFO — based on task date (_dDue), not alert date
+        const _dueD=_eDue; // already resolved above
         const _isCompleted=!!(e.completed||_doneIdsAlert.has(e.id));
-        const daysInfo=_isCompleted?'✅ Done':d===null?'—':d<0?`Overdue ${Math.abs(d)}d`:d===0?'Due Today':`${d}d left`;
-        const daysColor=_isCompleted?'#166534':d===null||d<0?'var(--red)':d===0?'#e09050':'var(--grn)';
+        const n_days=_dueD!==null?Math.abs(_dueD):0;
+        const daysInfo=_isCompleted?'✅ Done':_dueD===null?'—':_dueD<0?'Overdue '+n_days+' day'+(n_days>1?'s':''):_dueD===0?'Due Today':_dueD+' day'+(_dueD>1?'s':'')+' left';
+        const daysColor=_isCompleted?'#166534':_dueD===null?'var(--mut)':_dueD<0?'#e05050':_dueD===0?'#e09050':'#1a7a45';
         const daysCell=`<td style="padding:7px 8px;font-size:.72rem;font-weight:700;color:${daysColor};white-space:nowrap;">${daysInfo}</td>`;
 
         // 6. REMINDER TYPE
@@ -619,8 +630,13 @@ const APP = {
         }
         const freqCell=`<td style="padding:7px 8px;font-size:.65rem;color:var(--mut);max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${freq}">${freq}</td>`;
 
-        // 8. ALERT BEFORE
-        const beforeLabel=isRent||isLoan?'On invoice':e.before?blLabelA[e.before]||e.before+'d':'—';
+        // 8. ALERT BEFORE — normalise to integer days
+        var _bDays = parseInt(e.beforeDays||0);
+        if(!_bDays||isNaN(_bDays)){
+          var _bRaw=parseInt(e.before||0);
+          _bDays=_bRaw>1440?Math.round(_bRaw/1440):(_bRaw>0?_bRaw:0);
+        }
+        const beforeLabel=isRent||isLoan?'On invoice':_bDays>0?(_bDays===1?'1 day':_bDays<7?_bDays+' days':_bDays<30?Math.round(_bDays/7)+'wk':Math.round(_bDays/30)+'mo'):'Same day';
         const beforeCell=`<td style="padding:7px 8px;font-size:.65rem;color:var(--mut);white-space:nowrap;">${beforeLabel}</td>`;
 
         // 9. STATUS
@@ -655,8 +671,8 @@ const APP = {
               <tr style="background:var(--card2);border-bottom:1.5px solid var(--bdr2);">
                 <th style="padding:6px 8px;text-align:left;font-size:.58rem;text-transform:uppercase;letter-spacing:.05em;color:var(--mut);">Category</th>
                 <th style="padding:6px 8px;text-align:left;font-size:.58rem;text-transform:uppercase;letter-spacing:.05em;color:var(--mut);">Name</th>
-                <th style="padding:6px 8px;text-align:left;font-size:.58rem;text-transform:uppercase;letter-spacing:.05em;color:var(--mut);">Reminder Date</th>
-                <th style="padding:6px 8px;text-align:left;font-size:.58rem;text-transform:uppercase;letter-spacing:.05em;color:var(--mut);">Expiry/Amt</th>
+                <th style="padding:6px 8px;text-align:left;font-size:.58rem;text-transform:uppercase;letter-spacing:.05em;color:var(--mut);">Alert Date</th>
+                <th style="padding:6px 8px;text-align:left;font-size:.58rem;text-transform:uppercase;letter-spacing:.05em;color:var(--mut);">Task Date / Amt</th>
                 <th style="padding:6px 8px;text-align:left;font-size:.58rem;text-transform:uppercase;letter-spacing:.05em;color:var(--mut);">Days</th>
                 <th style="padding:6px 8px;text-align:left;font-size:.58rem;text-transform:uppercase;letter-spacing:.05em;color:var(--mut);">Type</th>
                 <th style="padding:6px 8px;text-align:left;font-size:.58rem;text-transform:uppercase;letter-spacing:.05em;color:var(--mut);">Freq</th>
