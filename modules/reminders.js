@@ -73,50 +73,62 @@ Object.assign(APP, {
         daysOfWeek:selDays,monthsOfYear:selMonths};
     } else {
       // ── Reminder date = actual trigger date (NOT expiry) ──
-      const trigDate = vDate('rmm_trigdate') || vDate('rmm_exp') || '';
-      if(!trigDate){ alert('Reminder date zaroori hai! Kab remind karna hai?'); return; }
+      // dueDate = actual date picked by user (NEVER overwritten by alert calc)
+      const dueDate = vDate('rmm_trigdate') || vDate('rmm_exp') || '';
+      if(!dueDate){ alert('Reminder date zaroori hai! Kab remind karna hai?'); return; }
 
       const alertHour = document.getElementById('rmm_alert_hour') ? document.getElementById('rmm_alert_hour').value||'10' : '10';
       const alertMin  = document.getElementById('rmm_alert_min')  ? document.getElementById('rmm_alert_min').value||'00'  : '00';
 
-      // ── Validate: past time check ──
-      const now = new Date();
-      var _sd=trigDate.split('-'); const selectedDT=_sd.length===3?new Date(parseInt(_sd[0]),parseInt(_sd[1])-1,parseInt(_sd[2]),parseInt(alertHour),parseInt(alertMin),0,0):null;
-      const warn = document.getElementById('rmm_past_warn');
-      if(selectedDT < now){
-        if(warn) warn.style.display = 'block';
-        // Only block if date is today and time is past
-        const todayStr = now.toISOString().slice(0,10);
-        if(trigDate === todayStr){
-          alert('⚠️ Please select a future time! Abhi ka time past ho gaya hai.');
-          return;
+      // beforeDays: integer days before dueDate to alert (0 = same day as dueDate)
+      let beforeDays = 0;
+      try {
+        if(window.REM && typeof window.REM._getBeforeDays === 'function')
+          beforeDays = window.REM._getBeforeDays() || 0;
+        if(!beforeDays){
+          const _bEl = document.getElementById('rmm_before_days_hidden');
+          if(_bEl && _bEl.value) beforeDays = parseInt(_bEl.value) || 0;
         }
-        // Past date — warn but allow (for records like expired docs)
+      } catch(_e){ beforeDays = 0; }
+      if(!beforeDays || isNaN(beforeDays)) beforeDays = 0;
+
+      // alertDate = dueDate minus beforeDays (the actual notification date)
+      let alertDate = dueDate;
+      if(beforeDays > 0){
+        try{
+          const _dp = dueDate.split('-');
+          if(_dp.length === 3){
+            const _ad = new Date(parseInt(_dp[0]),parseInt(_dp[1])-1,parseInt(_dp[2]),0,0,0,0);
+            _ad.setDate(_ad.getDate() - beforeDays);
+            alertDate = _ad.getFullYear()+'-'+String(_ad.getMonth()+1).padStart(2,'0')+'-'+String(_ad.getDate()).padStart(2,'0');
+          }
+        }catch(_e){ alertDate = dueDate; }
+      }
+
+      // Validate past-time against alertDate (not dueDate)
+      const now = new Date();
+      var _sd=alertDate.split('-');
+      const selectedDT=_sd.length===3?new Date(parseInt(_sd[0]),parseInt(_sd[1])-1,parseInt(_sd[2]),parseInt(alertHour),parseInt(alertMin),0,0):null;
+      const warn = document.getElementById('rmm_past_warn');
+      if(selectedDT && selectedDT < now){
+        if(warn) warn.style.display = 'block';
+        const todayStr = now.toISOString().slice(0,10);
+        if(alertDate === todayStr){ alert('⚠️ Please select a future time!'); return; }
         if(warn) warn.textContent = '⚠️ Yeh date/time past mein hai. Save karein?';
       } else {
         if(warn) warn.style.display = 'none';
       }
 
-      // expiry is optional
-      const exp = vDate('rmm_exp') || '';
-      // If exp is set AND trigDate was auto-calculated from exp, compute beforeDays
-      let beforeDays = '0';
-      if(exp && trigDate && exp !== trigDate){
-        try{
-          const ep=exp.split('-'),tp=trigDate.split('-');
-          if(ep.length===3&&tp.length===3){
-            const expD=new Date(parseInt(ep[0]),parseInt(ep[1])-1,parseInt(ep[2]),0,0,0,0);
-            const trigD=new Date(parseInt(tp[0]),parseInt(tp[1])-1,parseInt(tp[2]),0,0,0,0);
-            const diff=Math.round((expD-trigD)/86400000);
-            if(diff>0) beforeDays=String(diff);
-          }
-        }catch(e){}
-      }
+      const exp = vDate('rmm_exp') || dueDate;
+
       data = {...data,
-        trigDate,            // PRIMARY: actual reminder date
-        exp,                 // OPTIONAL: document expiry date
+        dueDate,             // ACTUAL due date - never overwritten
+        trigDate: alertDate, // alert trigger (dueDate - beforeDays) - backward compat
+        alertDate,           // explicit alert date field
+        exp,
+        before:    beforeDays, // integer days (0 = on dueDate)
+        beforeDays,
         issue:   vDate('rmm_issue')||'',
-        before:  beforeDays, // days before expiry (0 = on trigDate)
         autorenew: v('rmm_autorenew')||'no',
         period:  v('rmm_period')||'365',
         alertHour,
@@ -529,6 +541,7 @@ Object.assign(APP, {
 
     // ── CORE: Get trigger date for any reminder type ──
     // ✅ Uses reminderDate (= dueDate − before) when set; otherwise trigDate
+    // getTrig: returns ALERT date (when to notify) - not the due/expiry date
     function getTrig(r){
       if(!r) return null;
       if(r.mode==='recurring'){
@@ -536,35 +549,22 @@ Object.assign(APP, {
         if(r.start) return r.start;
         return null;
       }
-      // ✅ Prefer reminderDate — this is the actual alert date (dueDate - before)
-      if(r.reminderDate && r.reminderDate !== r.trigDate) return r.reminderDate;
-      // If trigDate already saved — subtract before to get real trigger
-      if(r.trigDate) {
-        var bDays = parseInt(r.beforeDays || 0);
-        // Also try r.before (stored in minutes) → convert to days
-        if(!bDays && r.before) bDays = Math.round(parseInt(r.before) / 1440);
-        if(bDays > 0) {
-          var dp2 = r.trigDate.split('-');
-          if(dp2.length === 3) {
-            var d2 = new Date(parseInt(dp2[0]), parseInt(dp2[1])-1, parseInt(dp2[2]), 0,0,0,0);
-            d2.setDate(d2.getDate() - bDays);
-            return d2.getFullYear()+'-'+String(d2.getMonth()+1).padStart(2,'0')+'-'+String(d2.getDate()).padStart(2,'0');
-          }
-        }
-        return r.trigDate;
-      }
-      // Expiry-based (legacy): triggerDate = expiryDate - beforeDays
-      if(!r.exp) return null;
-      var ep=r.exp.split('-');
-      if(ep.length!==3) return null;
-      var ey=parseInt(ep[0]),em=parseInt(ep[1])-1,ed=parseInt(ep[2]);
-      if(isNaN(ey)||isNaN(em)||isNaN(ed)) return null;
-      var exp=new Date(ey,em,ed,0,0,0,0);
-      var before=parseInt(r.before||0);
-      // r.before stored as minutes in new reminders, as days in old ones
-      var beforeD = before > 1440 ? Math.round(before/1440) : before;
-      if(beforeD>0) exp.setDate(exp.getDate()-beforeD);
-      return exp.getFullYear()+'-'+String(exp.getMonth()+1).padStart(2,'0')+'-'+String(exp.getDate()).padStart(2,'0');
+      // alertDate: pre-calculated on save (= dueDate - beforeDays)
+      if(r.alertDate) return r.alertDate;
+      // trigDate in new saves = alertDate already, use directly
+      if(r.trigDate) return r.trigDate;
+      // Legacy: compute from dueDate/exp minus beforeDays
+      var _base = r.dueDate || r.exp || null;
+      if(!_base) return null;
+      var _bp = _base.split('-');
+      if(_bp.length!==3) return null;
+      var _by=parseInt(_bp[0]),_bm=parseInt(_bp[1])-1,_bd=parseInt(_bp[2]);
+      if(isNaN(_by)||isNaN(_bm)||isNaN(_bd)) return null;
+      var _d = new Date(_by,_bm,_bd,0,0,0,0);
+      var _days = parseInt(r.beforeDays||r.before||0);
+      if(_days>1440) _days=Math.round(_days/1440);
+      if(_days>0) _d.setDate(_d.getDate()-_days);
+      return _d.getFullYear()+'-'+String(_d.getMonth()+1).padStart(2,'0')+'-'+String(_d.getDate()).padStart(2,'0');
     }
 
     // ── Days from today to a date (negative = past) ──
@@ -615,7 +615,7 @@ Object.assign(APP, {
       const dTrig=dFromNow(trig);
       const dExp=(r.mode!=='recurring'&&r.exp)?dFromNow(r.exp):null;
       const completed=_doneIds.has(r.id)||!!r.completed;
-      allEntries.push({...r,_trig:trig,_dTrig:dTrig,_dExp:dExp,_src:'reminder',_category:'Other',completed});
+      allEntries.push({...r,_trig:trig,_dTrig:dTrig,_dDue:dFromNow(r.dueDate||r.exp||trig),_dExp:dExp,_src:'reminder',_category:'Other',completed});
     });
 
     // ── AUTO ADD: Medical follow-ups → allEntries ──
@@ -786,7 +786,16 @@ Object.assign(APP, {
             <span style="color:var(--mut)">⚡ Outstanding</span><span style="color:var(--red);font-weight:700">${fmt(e._outstanding||0)}</span>
             ${e._trigDate?`<span style="color:var(--mut)">📅 Due Date</span><span>${fD(e._trigDate)}</span>`:''}
           </div>`:''}
-          ${isRecurring?`<div>🔁 ${prdLabel[e.recurPeriod]||e.recurPeriod} · Before: ${e.recurBeforeVal||0} ${e.recurBeforeUnit||'days'}</div>`:''}
+          ${isRecurring?`<div>🔁 ${prdLabel[e.recurPeriod]||e.recurPeriod}${parseInt(e.recurBeforeVal||0)>0?' · Alert '+parseInt(e.recurBeforeVal)+' '+(e.recurBeforeUnit||'days')+' before':''}</div>`:''}
+          ${!isRecurring&&!isRentAuto&&!isLoanAuto&&!isMedical?(function(){
+            var _bd=parseInt(e.beforeDays||e.before||0); if(_bd>1440) _bd=Math.round(_bd/1440); if(!_bd||isNaN(_bd)) _bd=0;
+            var _due=e.dueDate||e.exp||'', _alt=e.alertDate||e.trigDate||'';
+            if(_bd>0&&_due&&_alt&&_due!==_alt)
+              return '<div style="color:#1565c0;">🔔 Alert: '+fD(_alt)+' ('+_bd+' day'+(_bd>1?'s':'')+' before due)</div>'
+                    +'<div>📅 Due: '+fD(_due)+'</div>';
+            if(_due) return '<div>📅 Date: '+fD(_due)+'</div>';
+            return '';
+          })():''}
           ${e.notes?`<div>📝 ${APP.autoLink(e.notes)}</div>`:''}
           ${(e.alertHour||e.alertMin)?`<div style="font-size:.72rem;color:#1565c0;margin-top:2px;">🔔 Reminder at ${APP._fmt12hr(e.alertHour||'10',e.alertMin||'00')}</div>`:''}
           ${(e.daysOfWeek&&e.daysOfWeek.length)?`<div style="font-size:.7rem;color:var(--mut);margin-top:2px;">📆 On: ${e.daysOfWeek.map(d=>['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d]).join(', ')}</div>`:''}
@@ -823,9 +832,19 @@ Object.assign(APP, {
               ${e.type||'—'} ${isRecurring?'· 🔁 '+(prdLabel[e.recurPeriod]||'Recurring'):''}
               ${!isRentAuto&&!isRecurring&&e.beforeLabel?'<span style="color:#2196f3;font-weight:700;margin-left:4px;">🔔 '+e.beforeLabel+'</span>':''}
             </div>
-            ${!isRentAuto&&!isRecurring&&e.beforeLabel&&e.trigDate&&e._trig&&e._trig!==e.trigDate?
-              `<div style="font-size:.62rem;color:var(--mut);margin-top:1px;">Alert: ${fD(e._trig)} · Due: ${fD(e.trigDate)}</div>` :
-              (!isRentAuto&&e._trig?`<div style="font-size:.62rem;color:var(--mut);margin-top:1px;">${fD(e._trig)}</div>`:'')}
+            ${!isRentAuto&&!isRecurring?(function(){
+              var _due   = e.dueDate||e.exp||e.trigDate||'';
+              var _alert = e.alertDate||e.trigDate||e._trig||'';
+              var _bd    = parseInt(e.beforeDays||e.before||0);
+              if(_bd>1440) _bd=Math.round(_bd/1440); if(!_bd||isNaN(_bd)) _bd=0;
+              var _hasDue=_due&&_due.length===10, _hasAlt=_alert&&_alert.length===10;
+              if(_hasDue&&_hasAlt&&_due!==_alert)
+                return '<div style="font-size:.63rem;font-weight:700;margin-top:2px;">📅 Due: '+fD(_due)+'</div>'
+                      +'<div style="font-size:.62rem;color:#1565c0;margin-top:1px;">🔔 Alert: '+fD(_alert)+(_bd>0?' ('+_bd+' day'+(_bd>1?'s':'')+' before)':'')+'</div>';
+              if(_hasDue) return '<div style="font-size:.62rem;color:var(--mut);margin-top:1px;">📅 '+fD(_due)+'</div>';
+              if(_hasAlt) return '<div style="font-size:.62rem;color:var(--mut);margin-top:1px;">🔔 '+fD(_alert)+'</div>';
+              return '';
+            })():''}
             ${e.snoozedUntil?`<div style="font-size:.6rem;color:#b06000;margin-top:1px;">⏰ Snoozed until ${(function(){var d=new Date(e.snoozedUntil);return d.toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});})()}</div>`:''}
           </div>
           <div style="text-align:right;flex-shrink:0;">
