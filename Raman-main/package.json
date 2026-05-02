@@ -1,0 +1,10 @@
+{
+  "name": "raman-dashboard",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Static personal dashboard for Raman Kumar.",
+  "scripts": {
+    "start": "python3 -m http.server 8000 --bind 127.0.0.1",
+    "serve": "python3 -m http.server 8000 --bind 127.0.0.1"
+  }
+}

@@ -1,0 +1,1292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Raman Dashboard">
+<meta name="application-name" content="Raman Dashboard">
+<meta name="theme-color" content="#b5701c">
+<meta name="description" content="Raman Kumar Personal Life Dashboard">
+<link rel="manifest" href="data:application/json,{%22name%22:%22Raman+Kumar+Dashboard%22,%22short_name%22:%22RK+Dashboard%22,%22start_url%22:%22./%22,%22display%22:%22standalone%22,%22background_color%22:%22%23f4efe6%22,%22theme_color%22:%22%23b5701c%22}">
+<title>Raman Kumar — Personal Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@300;400;500;600&display=swap" rel="stylesheet">
+<!-- jsPDF + AutoTable for PDF generation -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<!-- Global Styles -->
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body data-tab="home">
+
+<!-- APP Guard — transparent forwarder proxy, loaded first before any module -->
+<script src="js/app-guard.js"></script>
+
+<!-- HEADER -->
+<div class="hdr">
+  <div class="hdr-logo">
+    <div>
+      <div class="hdr-name">
+        <span class="hdr-owner">Raman Kumar</span>
+        <span class="hdr-sep">|</span>
+        <span class="hdr-product">Personal Life Dashboard</span>
+      </div>
+    </div>
+  </div>
+  <div class="hdr-right">
+    <div class="header-search-shell" id="headerSearchShell">
+      <button class="btn header-search-btn" type="button" onclick="APP.openSearchBar()" title="Search everything (Ctrl+F)">
+        <span class="material-symbols-outlined" aria-hidden="true">search</span>
+      </button>
+      <input id="globalSearchInp" class="header-search-input" type="text" placeholder="Search activities..." autocomplete="off"
+        onfocus="APP._onGlobalSearchFocus()"
+        oninput="APP._onGlobalSearchInput(this.value)"
+        onkeydown="APP._onGlobalSearchKeydown(event)">
+      <button class="header-search-clear" id="headerSearchClear" type="button" onclick="APP._clearGlobalSearch()" aria-label="Clear search">✕</button>
+      <div id="searchResultsWrap" class="header-search-results" aria-live="polite"></div>
+    </div>
+    <button class="btn header-search-shortcut" type="button" onclick="APP.openSearchBar()" title="Search everything (Ctrl+F)">
+      <span class="material-symbols-outlined" aria-hidden="true">search</span>
+    </button>
+    <button class="btn header-icon-btn header-bell-btn" onclick="APP.goTab('reminder')" title="Open reminders" aria-label="Reminders">
+      <span class="material-symbols-outlined" aria-hidden="true">notifications</span>
+      <span class="icon-dot" aria-hidden="true"></span>
+    </button>
+    <button class="btn header-icon-btn" onclick="APP.openSettings()" title="Settings — Delete Options" aria-label="Settings">
+      <span class="material-symbols-outlined" aria-hidden="true">settings</span>
+    </button>
+    <button class="btn header-avatar-btn" onclick="APP.goTab('home')" title="Open dashboard" aria-label="Dashboard">
+      <span class="avatar-fallback">RK</span>
+      <img alt="User profile" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBuhBlVbSjBRg0D3J0ZOvvZj41o-bTUHI-dwww3IQ_kOnY60J-_iTqaWcEIWsDdzhwg8qVBAaY_ubdv6kBCDfZCQOQeDun-FwNPgtir7He-d9eCzJXRc-Lo3ky84nwNLyJ1V7jXIZ4TaYsueepPhQ8Attjo6JMuIdTceAM3EMtfLNJvxY38-N2P5QfIQj8oRDJoC9Cs_8lIBdstPvlHwZK_X7MkUIcITobJJGVviVYrKStoL2lpClDb5g1jvCICf7Y4QrDeSSvJZA"/>
+    </button>
+    <div class="hdr-meta">
+      <span id="fbStatus" class="hdr-status" onclick="SYNC&&SYNC.forceLoad()" title="Tap to force refresh from cloud">⏳ Connecting...</span>
+      <span id="hdrDate" class="hdr-date"></span>
+    </div>
+    <button id="installBtn" class="btn b-sm" style="display:none;background:#e8f5e9;color:#1e7a45;border:1.5px solid #90c8a0;font-size:.72rem;" title="Android mein install karo">📱 Install</button>
+  </div>
+</div>
+
+<!-- TABS -->
+<div class="tabs">
+  <button class="tab on" data-t="home" onclick="APP.goTab('home')"><span class="nav-ic material-symbols-outlined" aria-hidden="true">dashboard</span><span>Dashboard</span></button>
+  <button class="tab" data-t="property" onclick="APP.goTab('property')"><span class="nav-ic material-symbols-outlined" aria-hidden="true">home</span><span>Property</span></button>
+  <button class="tab" data-t="rent" onclick="APP.goTab('rent')"><span class="nav-ic material-symbols-outlined" aria-hidden="true">payments</span><span>Rent</span></button>
+  <button class="tab" data-t="expense" onclick="APP.goTab('expense')"><span class="nav-ic material-symbols-outlined" aria-hidden="true">account_balance_wallet</span><span>Finance</span></button>
+  <button class="tab" data-t="khata" onclick="APP.goTab('khata')"><span class="nav-ic material-symbols-outlined" aria-hidden="true">menu_book</span><span>Khata Book</span></button>
+  <button class="tab" data-t="reminder" id="tab-reminder-btn" onclick="APP.goTab('reminder')"><span class="nav-ic material-symbols-outlined" aria-hidden="true">notifications_active</span><span>Reminders</span> <span id="remTabBadge" style="display:none;background:#e05050;color:#fff;font-size:.58rem;padding:1px 5px;border-radius:10px;font-weight:900;margin-left:2px;vertical-align:middle;"></span></button>
+  <button class="tab" data-t="medical" onclick="APP.medFilter30=false;APP.goTab('medical')"><span class="nav-ic material-symbols-outlined" aria-hidden="true">medical_information</span><span>Medical</span></button>
+  <button class="tab" data-t="travel" onclick="APP.goTab('travel')"><span class="nav-ic material-symbols-outlined" aria-hidden="true">travel_explore</span><span>Travel</span></button>
+  <button class="tab" data-t="calendar" onclick="APP.goTab('calendar')"><span class="nav-ic material-symbols-outlined" aria-hidden="true">calendar_today</span><span>Calendar</span></button>
+  <button class="tab" data-t="todo" onclick="APP.goTab('todo')"><span class="nav-ic material-symbols-outlined" aria-hidden="true">list_alt</span><span>To-Do</span></button>
+  <button class="tab" data-t="notepad" onclick="APP.goTab('notepad')"><span class="nav-ic material-symbols-outlined" aria-hidden="true">sticky_note_2</span><span>Notepad</span></button>
+</div>
+
+<!-- QUICK APPS BAR -->
+<div class="apps-bar dashboard-shell">
+  <div class="apps-label">Quick Open</div>
+  <div class="apps-row">
+    <a class="app-icon gmail" href="https://mail.google.com/mail/u/0/#inbox" target="_blank" title="Gmail Inbox kholo">
+      <span class="material-symbols-outlined app-mi app-mi-gmail" aria-hidden="true">mail</span>
+      <span>Gmail</span>
+    </a>
+    <a class="app-icon whatsapp" href="https://web.whatsapp.com" target="_blank" title="WhatsApp Web kholo">
+      <span class="material-symbols-outlined app-mi app-mi-whatsapp" aria-hidden="true">chat</span>
+      <span>WhatsApp</span>
+    </a>
+    <a class="app-icon gcal" href="https://calendar.google.com" target="_blank" title="Google Calendar kholo">
+      <span class="material-symbols-outlined app-mi app-mi-calendar" aria-hidden="true">calendar_month</span>
+      <span>Calendar</span>
+    </a>
+    <a class="app-icon gdrive" href="https://drive.google.com" target="_blank" title="Google Drive kholo">
+      <span class="material-symbols-outlined app-mi app-mi-drive" aria-hidden="true">cloud_upload</span>
+      <span>Drive</span>
+    </a>
+    <a class="app-icon chatgpt" href="https://chat.openai.com" target="_blank" title="ChatGPT kholo">
+      <span class="material-symbols-outlined app-mi app-mi-chatgpt" aria-hidden="true">psychology</span>
+      <span>ChatGPT</span>
+    </a>
+  </div>
+</div>
+
+<!-- QUICK LINKS BAR -->
+<div class="ql-bar dashboard-shell" id="qlBar">
+  <div class="ql-label">My Links</div>
+  <div class="ql-row">
+    <div id="qlLinks" class="ql-links"></div>
+    <button class="ql-link ql-add btn b-sm" onclick="APP.addQuickLink()" title="Add your favourite website">
+      <span class="material-symbols-outlined" aria-hidden="true">add_circle</span>
+      <span>Add Link</span>
+    </button>
+  </div>
+</div>
+
+<!-- PILLS -->
+<div class="pills dashboard-shell" id="pillsBar"></div>
+
+<div class="content">
+  <div id="pan-home"></div>
+  <div id="pan-property" style="display:none"></div>
+  <div id="pan-rent" style="display:none"></div>
+  <div id="pan-expense" style="display:none"></div>
+  <div id="pan-reminder" style="display:none"></div>
+  <div id="pan-medical" style="display:none"></div>
+  <div id="pan-travel" style="display:none"></div>
+  <div id="pan-calendar" style="display:none"></div>
+  <div id="pan-todo" style="display:none"></div>
+  <div id="pan-notepad" style="display:none"></div>
+  <div id="pan-khata" style="display:none"></div>
+  <div id="pan-search" style="display:none"></div>
+</div>
+
+<!-- ══ MODALS ══ -->
+
+<!-- ══ SNOOZE MODAL ══ -->
+<div class="overlay" id="snoozeM" style="z-index:600;">
+  <div class="modal" style="max-width:360px;padding:18px;">
+    <h2 style="margin-bottom:12px;">⏰ Snooze Reminder</h2>
+    <div id="snoozeRemName" style="font-weight:700;font-size:.88rem;margin-bottom:14px;color:var(--txt);padding:8px 12px;background:var(--card2);border-radius:8px;border-left:3px solid var(--acc);"></div>
+    <div style="font-size:.72rem;color:var(--mut);font-weight:700;text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px;">Snooze for how long?</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:12px;">
+      <button class="btn b-out" onclick="APP._doSnooze(10,'minutes')" style="justify-content:center;flex-direction:column;height:52px;">
+        <span style="font-size:1rem;">⏱️</span>
+        <span style="font-size:.72rem;font-weight:800;">10 Minutes</span>
+      </button>
+      <button class="btn b-out" onclick="APP._doSnooze(30,'minutes')" style="justify-content:center;flex-direction:column;height:52px;">
+        <span style="font-size:1rem;">⏰</span>
+        <span style="font-size:.72rem;font-weight:800;">30 Minutes</span>
+      </button>
+      <button class="btn b-out" onclick="APP._doSnooze(1,'hours')" style="justify-content:center;flex-direction:column;height:52px;">
+        <span style="font-size:1rem;">🕐</span>
+        <span style="font-size:.72rem;font-weight:800;">1 Hour</span>
+      </button>
+      <button class="btn b-out" onclick="APP._doSnooze(3,'hours')" style="justify-content:center;flex-direction:column;height:52px;">
+        <span style="font-size:1rem;">🕒</span>
+        <span style="font-size:.72rem;font-weight:800;">3 Hours</span>
+      </button>
+      <button class="btn b-out" onclick="APP._doSnooze(1,'days')" style="justify-content:center;flex-direction:column;height:52px;">
+        <span style="font-size:1rem;">📅</span>
+        <span style="font-size:.72rem;font-weight:800;">Tomorrow</span>
+      </button>
+      <button class="btn b-out" onclick="APP._doSnooze(7,'days')" style="justify-content:center;flex-direction:column;height:52px;">
+        <span style="font-size:1rem;">📆</span>
+        <span style="font-size:.72rem;font-weight:800;">1 Week</span>
+      </button>
+    </div>
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:12px;padding:8px;background:var(--card2);border-radius:8px;border:1px solid var(--bdr);">
+      <span style="font-size:.72rem;font-weight:700;color:var(--mut);white-space:nowrap;">Custom:</span>
+      <input id="snoozeCustomVal" type="number" min="1" max="999" value="1" style="width:60px;border:1px solid var(--bdr2);border-radius:6px;padding:5px 8px;font-size:.82rem;font-family:'Nunito',sans-serif;text-align:center;">
+      <select id="snoozeCustomUnit" style="flex:1;border:1px solid var(--bdr2);border-radius:6px;padding:5px 7px;font-size:.82rem;font-family:'Nunito',sans-serif;">
+        <option value="minutes">Minutes</option>
+        <option value="hours">Hours</option>
+        <option value="days" selected>Days</option>
+      </select>
+      <button class="btn b-gold b-sm" onclick="APP._doSnoozeCustom()">Set</button>
+    </div>
+    <div class="modal-foot" style="padding-top:8px;margin-top:0;">
+      <button class="btn b-out" onclick="M.close('snoozeM')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ REMINDER SOUND ELEMENT ══ -->
+<audio id="remSoundBell" preload="auto" style="display:none">
+  <!-- Generated via JS oscillator — no file needed -->
+</audio>
+
+<!-- Khata Book: Add/Edit Party Modal -->
+<div class="overlay" id="kbPartyM" data-noclose="1"><div class="modal" style="max-width:420px;">
+  <h2 id="kbPartyMT">👤 Add Party / Contact</h2>
+  <div class="fg"><label>Name *</label><input id="kbp_name" placeholder="e.g. Ramesh Bhai, ABC Traders"></div>
+  <div class="fg"><label>Phone (WhatsApp ke liye)</label><input id="kbp_phone" type="tel" placeholder="9876543210"></div>
+  <div class="fg">
+    <label style="display:flex;align-items:center;justify-content:space-between;">
+      Category
+      <button type="button" onclick="APP._kbAddCategory()" title="Add new category"
+        style="background:var(--acc);color:#fff;border:none;border-radius:5px;padding:2px 8px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:'Nunito',sans-serif;">+ New</button>
+    </label>
+    <select id="kbp_cat" style="background:var(--bg);border:1.5px solid var(--bdr2);color:var(--txt);padding:8px 11px;border-radius:7px;font-family:'Nunito',sans-serif;font-size:.85rem;outline:none;width:100%;">
+      <option value="personal">👨‍👩‍👧 Personal / Family</option>
+
+      <option value="property">🏠 Property / Rent</option>
+      <option value="friend">👫 Friend</option>
+      <option value="vendor">🏪 Vendor / Supplier</option>
+      <option value="loan">💳 Loan</option>
+      <option value="tenant">🏠 Tenant</option>
+      <option value="other">📌 Other</option>
+    </select>
+  </div>
+  <div class="fg"><label>Notes</label><input id="kbp_notes" placeholder="Optional notes about this party"></div>
+  <div class="modal-foot"><button class="btn b-out" type="button" onclick="M.close('kbPartyM')">Cancel</button><button id="kbp_save_btn" class="btn b-gold" type="button" data-app-action="kbSaveParty">Save</button></div>
+</div></div>
+
+<!-- Khata Book: Add Entry Modal -->
+<div class="overlay" id="kbEntryM" data-noclose="1" style="align-items:center;justify-content:center;">
+  <div class="modal" style="max-width:420px;width:100%;margin:0 auto;padding:0;display:flex;flex-direction:column;max-height:min(88vh,calc(100dvh - 60px));overflow:hidden;border-radius:14px;box-shadow:0 8px 40px rgba(0,0,0,.25);">
+
+    <!-- Fixed header -->
+    <div style="flex-shrink:0;padding:16px 18px 0 18px;background:var(--card);">
+      <h2 id="kbEntryMT" style="margin:0 0 10px 0;padding:0;border:none;font-size:1.1rem;">➕ Add Entry</h2>
+      <div id="kbEntryPartyInfo" style="background:#f0f7ff;border-radius:8px;padding:7px 12px;margin-bottom:10px;font-size:.82rem;font-weight:700;color:var(--acc);"></div>
+      <!-- Type buttons -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+        <button id="kbe_btn_lena" onclick="APP.kbSetEntryType('lena')"
+          style="padding:10px;border-radius:9px;border:2px solid #bbf7d0;background:#dcfce7;color:#166534;font-size:.85rem;font-weight:800;cursor:pointer;font-family:'Nunito',sans-serif;">
+          🤲 Liya (Received)
+        </button>
+        <button id="kbe_btn_dena" onclick="APP.kbSetEntryType('dena')"
+          style="padding:10px;border-radius:9px;border:2px solid #fecaca;background:#fee2e2;color:#991b1b;font-size:.85rem;font-weight:800;cursor:pointer;font-family:'Nunito',sans-serif;">
+          💸 Diya (Paid)
+        </button>
+      </div>
+      <input type="hidden" id="kbe_type" value="lena">
+    </div>
+
+    <!-- Scrollable form body -->
+    <div style="flex:1;overflow-y:auto;padding:0 18px 8px 18px;-webkit-overflow-scrolling:touch;">
+      <div class="fgrid">
+        <div class="fg full">
+          <label>Amount (₹) *</label>
+          <input id="kbe_amount" type="number" inputmode="decimal" placeholder="0"
+            style="font-size:1.4rem;font-weight:800;text-align:center;background:var(--dim);border:2px solid var(--bdr2);border-radius:10px;padding:10px;width:100%;box-sizing:border-box;outline:none;color:var(--txt);"
+            onfocus="this.style.borderColor='var(--acc)'" onblur="this.style.borderColor='var(--bdr2)'" oninput="APP._updateTdsPreview()">
+        </div>
+        <div class="fg"><label>📅 Date</label><div id="kbe_date_wrap"></div></div>
+        <div class="fg"><label>📝 Note</label><input id="kbe_note" placeholder="e.g. Rent, Loan, Return..."></div>
+        <div class="fg"><label>💳 Mode</label>
+          <select id="kbe_mode" style="background:var(--bg);border:1.5px solid var(--bdr2);color:var(--txt);padding:8px 11px;border-radius:7px;font-family:'Nunito',sans-serif;font-size:.85rem;outline:none;width:100%;">
+            <option>Cash</option><option>UPI</option><option>NEFT/IMPS</option><option>Cheque</option><option>Other</option>
+          </select>
+        </div>
+        <div class="fg full"><label>📎 Files (optional)</label>
+          <div id="fu_kb_entry_wrap"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- STICKY FOOTER — always visible -->
+    <div style="flex-shrink:0;display:flex;gap:8px;padding:10px 18px max(16px, env(safe-area-inset-bottom, 16px));border-top:1px solid var(--bdr);background:var(--card);">
+      <button class="btn b-out" type="button" onclick="M.close('kbEntryM');FUM.clear('fu_kb_entry_wrap')" style="flex:1;min-height:44px;">Cancel</button>
+      <button id="kbe_save_btn" class="btn b-gold" type="button" data-app-action="kbSaveEntry" style="flex:2;min-height:44px;font-weight:800;">Save Entry</button>
+    </div>
+
+  </div>
+</div>
+
+<!-- Khata Book: Cash Register Entry Modal -->
+<div class="overlay" id="kbCashM" data-noclose="1"><div class="modal" style="max-width:420px;">
+  <h2 id="kbCashMT">💵 Cash Register Entry</h2>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+    <button id="kbc_btn_in" onclick="APP.kbSetCashType('in')"
+      style="padding:10px;border-radius:9px;border:2px solid #bbf7d0;background:#dcfce7;color:#166534;font-size:.88rem;font-weight:800;cursor:pointer;font-family:'Nunito',sans-serif;">
+      ⬇️ Liya Hai (Cash In)
+    </button>
+    <button id="kbc_btn_out" onclick="APP.kbSetCashType('out')"
+      style="padding:10px;border-radius:9px;border:2px solid #fecaca;background:#fee2e2;color:#991b1b;font-size:.88rem;font-weight:800;cursor:pointer;font-family:'Nunito',sans-serif;">
+      ⬆️ Diya Hai (Cash Out)
+    </button>
+  </div>
+  <input type="hidden" id="kbc_type" value="in">
+  <div class="fgrid">
+    <div class="fg full"><label>Amount (₹) *</label><input id="kbc_amount" type="number" placeholder="0" style="font-size:1.1rem;font-weight:700;text-align:center;"></div>
+    <div class="fg"><label>📅 Date</label><div id="kbc_date_wrap"></div></div>
+    <div class="fg"><label>Category</label>
+      <select id="kbc_cat" style="background:var(--bg);border:1.5px solid var(--bdr2);color:var(--txt);padding:8px 11px;border-radius:7px;font-family:'Nunito',sans-serif;font-size:.85rem;outline:none;width:100%;">
+        <option>General</option><option>Rent Received</option><option>Loan Given</option><option>Loan Returned</option>
+        <option>Business Income</option><option>Business Expense</option><option>Personal</option><option>Other</option>
+      </select>
+    </div>
+    <div class="fg"><label>Note</label><input id="kbc_note" placeholder="Description..."></div>
+  </div>
+  <div class="modal-foot"><button class="btn b-out" type="button" onclick="M.close('kbCashM')">Cancel</button><button id="kbc_save_btn" class="btn b-gold" type="button" data-app-action="kbSaveCash">Save</button></div>
+</div></div>
+
+<!-- Property -->
+<div class="overlay" id="propM"><div class="modal" style="max-width:500px;">
+  <h2 id="propMT">🏢 Add Property</h2>
+  <div class="fgrid">
+
+    <!-- Name — required -->
+    <div class="full fg">
+      <label>🏠 Property Name / Address <span class="req-star" aria-hidden="true">*</span></label>
+      <input id="prm_name" placeholder="e.g. Flat 4B, Green Park, Noida"
+        oninput="this.style.borderColor=this.value.trim()?'var(--bdr2)':'#e53935'">
+      <div id="prm_name_err" style="display:none;font-size:.7rem;color:#e53935;margin-top:3px;">⚠️ Property name required</div>
+    </div>
+
+    <!-- Property Type — dropdown with all options -->
+    <div class="fg">
+      <label>🏷️ Property Type</label>
+      <select id="prm_type" style="background:var(--bg);border:1.5px solid var(--bdr2);color:var(--txt);padding:8px 10px;border-radius:7px;font-family:'Nunito',sans-serif;font-size:.85rem;outline:none;width:100%;">
+        <option value="">— Select Type —</option>
+        <option value="Residential">🏠 Residential</option>
+        <option value="Commercial">🏢 Commercial</option>
+        <option value="Office">💼 Office</option>
+        <option value="Shop / Showroom">🏪 Shop / Showroom</option>
+        <option value="Industrial">🏭 Industrial</option>
+        <option value="Land / Plot">🌳 Land / Plot</option>
+        <option value="Agricultural">🌾 Agricultural</option>
+        <option value="Warehouse">📦 Warehouse</option>
+        <option value="Other">📌 Other</option>
+      </select>
+      <div id="prm_type_err" style="display:none;font-size:.7rem;color:#e53935;margin-top:3px;">⚠️ Please select property type</div>
+    </div>
+
+    <!-- City -->
+    <div class="fg">
+      <label>🏙️ City <span style="color:var(--mut);font-size:.65rem;">(optional)</span></label>
+      <input id="prm_city" placeholder="e.g. Noida, Greater Noida">
+    </div>
+
+    <!-- Purchase From -->
+    <div class="fg">
+      <label>🤝 Purchase From <span style="color:var(--mut);font-size:.65rem;">(optional)</span></label>
+      <select id="prm_from" style="background:var(--bg);border:1.5px solid var(--bdr2);color:var(--txt);padding:8px 10px;border-radius:7px;font-family:'Nunito',sans-serif;font-size:.85rem;outline:none;width:100%;">
+        <option value="">— Select —</option>
+        <option value="Builder">🏗️ Builder</option>
+        <option value="Seller">🧑 Seller (Direct)</option>
+        <option value="Resale">🔄 Resale</option>
+        <option value="Auction">🔨 Auction</option>
+        <option value="Other">📌 Other</option>
+      </select>
+    </div>
+
+    <!-- Purchase Cost — auto-calculated from ledger, read-only when ledger has entries -->
+    <div class="fg">
+      <label>💰 Total Property Cost (₹) <span id="prm_cost_note" style="font-size:.65rem;color:var(--acc);font-weight:600;">(auto from ledger)</span></label>
+      <input id="prm_cost" type="number" placeholder="0" readonly style="background:#f0f7ff;border:1.5px solid #90b8e8;color:var(--acc);font-weight:700;">
+    </div>
+
+    <!-- Purchase Date — OPTIONAL -->
+    <div class="fg">
+      <label>📅 Purchase Date
+        <span style="font-size:.68rem;color:var(--mut);font-weight:400;">(optional — DD/MM/YYYY)</span>
+      </label>
+      <div id="prm_date_wrap"></div>
+    </div>
+
+    <!-- Area -->
+    <div class="fg">
+      <label>📐 Area (sq ft) <span style="color:var(--mut);font-size:.65rem;">(optional)</span></label>
+      <input id="prm_area" placeholder="0">
+    </div>
+
+    <!-- Notes -->
+    <div class="full fg">
+      <label>📝 Notes <span style="color:var(--mut);font-size:.65rem;">(optional)</span></label>
+      <textarea id="prm_notes" placeholder="Additional details..."></textarea>
+    </div>
+    <!-- ══ BUILDER PAYMENT LEDGER SECTION ══ -->
+    <div class="full fg" style="border-top:2px dashed var(--bdr2);padding-top:12px;margin-top:4px;">
+      <label style="font-size:.82rem;font-weight:800;color:var(--acc);letter-spacing:.02em;">🏗️ Builder Payment Ledger</label>
+      <div style="font-size:.7rem;color:var(--mut);margin-bottom:8px;">Track all payments made to builder, govt, lawyer, bank etc.</div>
+      <div id="prm_ledger_form" style="background:var(--bg);border:1.5px solid var(--bdr2);border-radius:9px;padding:10px 12px;margin-bottom:10px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+          <div><label style="font-size:.7rem;font-weight:700;color:var(--mut);">📅 Date</label><div id="prm_led_date_wrap" style="margin-top:2px;"></div></div>
+          <div><label style="font-size:.7rem;font-weight:700;color:var(--mut);">💵 Amount (₹)</label><input id="prm_led_amount" type="number" placeholder="0" style="width:100%;margin-top:2px;padding:6px 9px;border:1.5px solid var(--bdr2);border-radius:7px;font-family:Nunito,sans-serif;font-size:.83rem;background:var(--surf);color:var(--txt);outline:none;"></div>
+          <div><label style="font-size:.7rem;font-weight:700;color:var(--mut);">🏛️ Paid To</label><select id="prm_led_paidto" style="width:100%;margin-top:2px;padding:6px 9px;border:1.5px solid var(--bdr2);border-radius:7px;font-family:Nunito,sans-serif;font-size:.83rem;background:var(--surf);color:var(--txt);outline:none;"><option value="Builder">🏗️ Builder</option><option value="Govt / Registry">🏛️ Govt / Registry</option><option value="Lawyer">⚖️ Lawyer</option><option value="Bank">🏦 Bank</option><option value="Broker">🤝 Broker</option><option value="RWA">🏘️ RWA</option><option value="Other">📌 Other</option></select></div>
+          <div><label style="font-size:.7rem;font-weight:700;color:var(--mut);">💳 Mode</label><select id="prm_led_mode" style="width:100%;margin-top:2px;padding:6px 9px;border:1.5px solid var(--bdr2);border-radius:7px;font-family:Nunito,sans-serif;font-size:.83rem;background:var(--surf);color:var(--txt);outline:none;"><option value="Cheque">📄 Cheque</option><option value="NEFT / RTGS">🔄 NEFT / RTGS</option><option value="UPI">📱 UPI</option><option value="Cash">💵 Cash</option><option value="DD">🏦 Demand Draft</option><option value="Bank Transfer">🏦 Bank Transfer</option></select></div>
+          <div><label style="font-size:.7rem;font-weight:700;color:var(--mut);">🔖 Ref (Cheque/Txn ID)</label><input id="prm_led_ref" placeholder="Optional" style="width:100%;margin-top:2px;padding:6px 9px;border:1.5px solid var(--bdr2);border-radius:7px;font-family:Nunito,sans-serif;font-size:.83rem;background:var(--surf);color:var(--txt);outline:none;"></div>
+        </div>
+        <div style="margin-top:8px;"><label style="font-size:.7rem;font-weight:700;color:var(--mut);">📝 Purpose / Description</label><input id="prm_led_purpose" placeholder="e.g. Down Payment, Installment-1, Stamp Duty, Registry, Brokerage" style="width:100%;margin-top:2px;padding:6px 9px;border:1.5px solid var(--bdr2);border-radius:7px;font-family:Nunito,sans-serif;font-size:.83rem;background:var(--surf);color:var(--txt);outline:none;"></div>
+        <div style="margin-top:6px;"><label style="font-size:.7rem;font-weight:700;color:var(--mut);">🗒️ Notes (optional)</label><input id="prm_led_notes" placeholder="Additional info" style="width:100%;margin-top:2px;padding:6px 9px;border:1.5px solid var(--bdr2);border-radius:7px;font-family:Nunito,sans-serif;font-size:.83rem;background:var(--surf);color:var(--txt);outline:none;"></div>
+        <button onclick="APP._addLedgerEntry()" style="margin-top:9px;width:100%;background:var(--acc);color:#fff;border:none;border-radius:7px;padding:7px 14px;font-family:Nunito,sans-serif;font-size:.82rem;font-weight:800;cursor:pointer;touch-action:manipulation;">➕ Add Payment Entry</button>
+      </div>
+      <div id="prm_ledger_list" style="max-height:220px;overflow-y:auto;"></div>
+      <div id="prm_ledger_total" style="display:none;text-align:right;font-size:.82rem;font-weight:800;color:var(--acc);padding:6px 4px 0;border-top:1.5px solid var(--bdr2);margin-top:4px;"></div>
+    </div>
+    <!-- File Attachments -->
+    <div class="full fg">
+      <label>📎 Documents / Photos (multiple allowed)</label>
+      <div id="fu_prop_doc_wrap"></div>
+    </div>
+  </div>
+  <div class="modal-foot">
+    <button class="btn b-out" type="button" onclick="APP._cancelPropModal()">Cancel</button>
+    <button id="prm_save_btn" class="btn b-gold" type="button" data-app-action="saveProp">Save Property</button>
+  </div>
+</div></div>
+
+<!-- Tenant (Landlordy-style) -->
+<div class="overlay" id="tenM"><div class="modal" style="max-width:660px;max-height:min(92vh,calc(100dvh - 80px));">
+  <h2 id="tenMT">👤 Add Tenant</h2>
+  <div style="background:#f0f7ff;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:.8rem;color:var(--blu);">
+    📅 Enter all dates as <b>DD/MM/YYYY</b> — type directly or click 📅 for calendar picker
+  </div>
+  <div class="fgrid">
+    <div class="fg"><label>Tenant Name <span class="req-star" aria-hidden="true">*</span></label><input id="tnm_name" placeholder="Full name"></div>
+    <div class="fg"><label>Mobile 1 <span style="color:var(--mut);font-size:.65rem;">(optional)</span></label><input id="tnm_ph" placeholder="+91 XXXXX XXXXX"></div>
+    <div class="fg"><label>Mobile 2 <span style="color:var(--mut);font-size:.65rem;">(optional)</span></label><input id="tnm_ph2" placeholder="+91 XXXXX XXXXX"></div>
+    <div class="fg"><label>Email 1 <span style="color:var(--mut);font-size:.65rem;">(optional)</span></label><input id="tnm_email" placeholder="tenant@email.com"></div>
+    <div class="fg"><label>Email 2 <span style="color:var(--mut);font-size:.65rem;">(optional)</span></label><input id="tnm_email2" placeholder="second@email.com"></div>
+    <div class="fg"><label>ID Proof Type <span style="color:var(--mut);font-size:.65rem;">(optional)</span></label><select id="tnm_idtype"><option value="">—</option><option>Aadhaar</option><option>PAN</option><option>Passport</option><option>Voter ID</option></select></div>
+    <div class="fg"><label>ID Proof Number <span style="color:var(--mut);font-size:.65rem;">(optional)</span></label><input id="tnm_idno" placeholder="Aadhaar / PAN number"></div>
+    <div class="full fg"><label>🏠 Home / Permanent Address <span style="color:var(--mut);font-size:.65rem;">(optional)</span></label><textarea id="tnm_addr" placeholder="Tenant ka permanent address..." style="min-height:50px;"></textarea></div>
+    <div class="fg"><label>Property</label><select id="tnm_prop"></select></div>
+    <div class="fg"><label>Monthly Rent (₹) <span class="req-star" aria-hidden="true">*</span></label><input id="tnm_rent" type="number"></div>
+    <div class="fg"><label>Security Deposit (₹) <span style="color:var(--mut);font-size:.65rem;">(optional)</span></label><input id="tnm_sec" type="number"></div>
+    <div class="fg"><label>Advance (₹) <span style="color:var(--mut);font-size:.65rem;">(optional)</span></label><input id="tnm_adv" type="number"></div>
+    <div class="fg"><label>Maintenance (₹/mo) <span style="color:var(--mut);font-size:.65rem;">(optional)</span></label><input id="tnm_maint" type="number" placeholder="0"></div>
+    <div class="fg"><label>📅 Agreement Start <span style="color:var(--mut);font-size:.65rem;">(optional)</span> (DD/MM/YYYY)</label><div id="tnm_start_wrap"></div></div>
+    <div class="fg"><label>📅 Agreement End <span style="color:var(--mut);font-size:.65rem;">(optional)</span> (DD/MM/YYYY)</label><div id="tnm_end_wrap"></div></div>
+    <div class="fg"><label>Rent Due Day <span style="color:var(--mut);font-size:.65rem;">(optional)</span></label><select id="tnm_due"><option value="1">1st</option><option value="5">5th</option><option value="7">7th</option><option value="10">10th</option><option value="15">15th</option><option value="20">20th</option><option value="25">25th</option><option value="28">28th</option></select></div>
+    <div class="fg"><label>Payment Mode <span style="color:var(--mut);font-size:.65rem;">(optional)</span></label><select id="tnm_mode"><option>NEFT</option><option>RTGS</option><option>UPI</option><option>Cheque</option><option>Cash</option></select></div>
+    <div class="fg"><label>Status <span style="color:var(--mut);font-size:.65rem;">(optional)</span></label><select id="tnm_status"><option value="active">Active</option><option value="notice">Notice Period</option><option value="ended">Ended</option><option value="vacant">Vacant</option></select></div>
+    <div class="full fg"><label>📎 Agreement Document <span style="color:var(--mut);font-size:.65rem;">(optional)</span></label><div id="fu_ten_doc_wrap"></div></div>
+    <div class="fg"><label>🔁 Recurring Rent Invoice <span style="color:var(--mut);font-size:.65rem;">(optional)</span></label>
+      <select id="tnm_recurring" style="background:var(--bg);border:1.5px solid var(--bdr2);color:var(--txt);padding:8px 11px;border-radius:7px;font-family:'Nunito',sans-serif;font-size:.85rem;outline:none;width:100%;" onchange="document.getElementById('tnm_invdate_row').style.display=this.value==='yes'?'':'none'">
+        <option value="no">No</option>
+        <option value="yes">Yes — Auto generate monthly</option>
+      </select>
+    </div>
+    <div class="fg" id="tnm_invdate_row" style="display:none"><label>📅 Invoice Generate Day (DD/MM/YYYY)</label><div id="tnm_invdate_wrap"></div></div>
+    <div class="full fg"><label>Notes / Special Conditions <span style="color:var(--mut);font-size:.65rem;">(optional)</span></label><textarea id="tnm_notes"></textarea></div>
+  </div>
+
+  <div class="modal-foot"><button class="btn b-out" type="button" onclick="M.close('tenM')">Cancel</button><button id="tnm_save_btn" class="btn b-gold" type="button" data-app-action="saveTenant">Save Tenant</button></div>
+</div></div>
+
+<!-- Payment -->
+<div class="overlay" id="payM" data-noclose="1">
+  <div class="modal" style="max-width:720px;padding:0;display:flex;flex-direction:column;max-height:min(92vh,calc(100dvh - 80px));overflow:hidden;">
+
+    <!-- Header -->
+    <div style="flex-shrink:0;padding:0;">
+      <div id="payMT" style="display:none;"></div><!-- JS compatibility element -->
+      <!-- Type selector tabs -->
+      <div id="payM_type_tabs" style="display:grid;grid-template-columns:1fr 1fr;border-radius:12px 12px 0 0;overflow:hidden;">
+        <button id="pym_btn_pay" onclick="APP._setPayType('payment')"
+          style="padding:13px 8px;border:none;border-bottom:3px solid #16a34a;background:#f0fdf4;color:#16a34a;font-size:.85rem;font-weight:800;cursor:pointer;font-family:'Nunito',sans-serif;">
+          💰 Payment Received
+        </button>
+        <button id="pym_btn_ref" onclick="APP._setPayType('refund')"
+          style="padding:13px 8px;border:none;border-bottom:3px solid transparent;background:var(--dim);color:var(--mut);font-size:.85rem;font-weight:700;cursor:pointer;font-family:'Nunito',sans-serif;">
+          ↩️ Refund / Return
+        </button>
+      </div>
+      <input type="hidden" id="pym_type" value="payment">
+    </div>
+
+    <!-- Scrollable body -->
+    <div id="payM_body" style="flex:1;overflow-y:auto;padding:14px 16px;-webkit-overflow-scrolling:touch;">
+
+      <!-- Tenant info banner -->
+      <div id="payM_info" style="background:var(--dim);border-radius:9px;padding:9px 13px;margin-bottom:12px;font-size:.82rem;"></div>
+
+      <!-- Refund note -->
+      <div id="pym_refund_note" style="display:none;background:#fff0f0;border:1.5px solid #fecaca;border-radius:9px;padding:9px 13px;font-size:.78rem;color:#c0392b;margin-bottom:12px;">
+        ↩️ <b>Refund Entry:</b> This will be recorded as a <b>separate debit transaction</b>.<br>
+        Previous payments are <b>NOT deleted</b>. Running balance will reduce accordingly.
+      </div>
+
+      <!-- Amount — prominent -->
+      <div style="text-align:center;margin-bottom:14px;">
+        <div id="pym_amt_label" style="font-size:.62rem;text-transform:uppercase;letter-spacing:.08em;color:var(--mut);font-weight:700;margin-bottom:5px;">🏦 BANK AMOUNT (₹) <span class="req-star" aria-hidden="true">*</span></div>
+        <input id="pym_amt" type="number" inputmode="decimal" placeholder="0"
+          style="width:100%;text-align:center;font-size:1.7rem;font-weight:900;font-family:'JetBrains Mono',monospace;color:var(--txt);background:var(--dim);border:2px solid var(--bdr2);border-radius:12px;padding:10px 14px;outline:none;box-sizing:border-box;transition:border-color .15s;"
+          onfocus="this.style.borderColor='var(--acc)'" onblur="this.style.borderColor='var(--bdr2)'" oninput="APP._updateTdsPreview()">
+      </div>
+
+      <div class="fgrid">
+        <div class="fg"><label>📅 Date <span class="req-star" aria-hidden="true">*</span> (DD/MM/YYYY)</label><div id="pym_date_wrap"></div></div>
+        <div class="fg"><label>🗓️ Rent For Month <span style="color:var(--mut);font-size:.65rem;">(optional)</span></label>
+          <select id="pym_rent_month" style="width:100%;background:var(--bg);border:1.5px solid var(--bdr2);color:var(--txt);padding:8px 10px;border-radius:7px;font-family:'Nunito',sans-serif;font-size:.84rem;outline:none;"></select>
+        </div>
+        <div class="fg"><label>💳 Payment Mode <span style="color:var(--mut);font-size:.65rem;">(optional)</span></label>
+          <select id="pym_mode" style="width:100%;background:var(--bg);border:1.5px solid var(--bdr2);color:var(--txt);padding:8px 10px;border-radius:7px;font-family:'Nunito',sans-serif;font-size:.84rem;outline:none;">
+            <option>NEFT</option><option>RTGS</option><option>UPI</option><option>Cheque</option><option>Cash</option><option>Bank Transfer</option><option>Other</option>
+          </select>
+        </div>
+        <div class="fg"><label>🔖 Ref / UTR Number <span style="color:var(--mut);font-size:.65rem;">(optional)</span></label><input id="pym_ref" placeholder="Transaction reference"></div>
+        <div class="full fg"><label>📝 Note <span style="color:var(--mut);font-size:.65rem;">(optional)</span></label><input id="pym_note" placeholder="e.g. March 2026 rent, Excess refund…"></div>
+        <div class="full fg"><label>📎 Receipt <span style="color:var(--mut);font-size:.65rem;">(optional)</span></label><div id="fu_pay_receipt_wrap"></div></div>
+
+        <!-- TDS Deduction — separate from bank payment -->
+        <div class="full pay-tds-card" style="background:#f5f3ff;border:1.5px solid #c4b5fd;border-radius:10px;padding:11px 13px;margin-top:6px;">
+          <div style="font-size:.72rem;font-weight:800;color:#5b21b6;margin-bottom:8px;display:flex;align-items:center;gap:6px;">
+            🏛️ TDS DEDUCTION
+            <span style="font-size:.62rem;color:#7c3aed;font-weight:400;">(optional — kept separate from bank payment)</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+            <div class="fg">
+              <label style="color:#5b21b6;">TDS AMOUNT (₹)</label>
+              <input id="pym_tds_amt" type="number" min="0" step="0.01" placeholder="0" style="border-color:#c4b5fd;" oninput="APP._updateTdsPreview()">
+            </div>
+            <div class="fg">
+              <label style="color:#5b21b6;">TDS DEDUCTION DATE</label>
+              <input id="pym_tds_date" type="date" style="border-color:#c4b5fd;">
+            </div>
+            <div class="fg">
+              <label style="color:#5b21b6;">TDS CHALLAN / REF NO.</label>
+              <input id="pym_tds_ref" placeholder="Challan No / UTR">
+            </div>
+            <div class="fg">
+              <label style="color:#5b21b6;">TDS STATUS</label>
+              <select id="pym_tds_status" style="border-color:#c4b5fd;">
+                <option value="pending">⏳ Pending Verification</option>
+                <option value="verified">✅ Verified</option>
+              </select>
+            </div>
+          </div>
+          <div id="pym_tds_preview" style="font-size:.72rem;color:#5b21b6;margin-top:6px;padding:5px 8px;background:#ede9fe;border-radius:6px;display:none;"></div>
+        </div>
+      </div>
+
+      <!-- Current balance summary -->
+      <div id="payM_bal" style="background:#fff8ee;border:1.5px solid var(--bdr2);border-radius:9px;padding:10px 13px;font-size:.82rem;margin-top:4px;"></div>
+
+
+    </div><!-- end scrollable -->
+
+    <!-- Sticky footer -->
+    <div class="payM_actions" style="flex-shrink:0;display:flex;gap:8px;padding:11px 16px max(14px, env(safe-area-inset-bottom));border-top:1.5px solid var(--bdr);background:var(--card);">
+      <button class="btn b-out" type="button" onclick="M.close('payM')" style="flex:1;">Cancel</button>
+      <button id="pym_del_btn" class="btn b-red" style="display:none;" onclick="APP.deleteCurrentPayment()">🗑</button>
+      <button id="pym_save_btn" class="btn b-grn" type="button" data-app-action="savePayment" style="flex:2;font-weight:800;">Save Payment</button>
+    </div>
+
+  </div>
+</div>
+
+<!-- Reminder -->
+<!-- ═══ ANDROID-STYLE REMINDER MODAL ═══ -->
+<div id="remM_overlay" style="display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.6);backdrop-filter:blur(3px);align-items:flex-end;justify-content:center;padding:0;flex-direction:column;">
+  <div id="remM_sheet" style="width:100%;max-width:520px;margin:0 auto;background:#1e2128;border-radius:20px 20px 0 0;display:flex;flex-direction:column;max-height:min(92vh,calc(100dvh - 60px));font-family:'Nunito',sans-serif;box-shadow:0 -8px 40px rgba(0,0,0,.5);transition:transform .3s cubic-bezier(.34,.65,.64,1);">
+
+    <!-- Header -->
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px 10px;border-bottom:1px solid #2d3340;flex-shrink:0;">
+      <button onclick="window.REM.close()" style="background:none;border:none;color:#888;font-size:1.2rem;cursor:pointer;padding:4px 8px;border-radius:8px;line-height:1;">✕</button>
+      <span id="remMT_new" style="font-size:1rem;font-weight:800;color:#fff;">Add Reminder</span>
+      <button onclick="window.REM.save()" id="rem_save_btn" style="background:#2196f3;color:#fff;border:none;border-radius:10px;padding:7px 18px;font-size:.85rem;font-weight:800;cursor:pointer;font-family:'Nunito',sans-serif;">SAVE</button>
+    </div>
+
+    <!-- Body — no scroll needed, all fits -->
+    <div style="padding:14px 18px 4px;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;">
+
+      <!-- Title input -->
+      <div style="background:#2a2f3a;border-radius:12px;display:flex;align-items:center;padding:2px 14px;border:1.5px solid #3d4455;margin-bottom:10px;">
+        <input id="rem_title_inp" placeholder="Remind me to..."
+          style="flex:1;background:none;border:none;color:#fff;font-size:.95rem;padding:10px 0;outline:none;font-family:'Nunito',sans-serif;">
+      </div>
+
+      <!-- Date + Time + Repeat — compact card -->
+      <div style="background:#2a2f3a;border-radius:14px;overflow:hidden;margin-bottom:10px;">
+
+        <!-- Date -->
+        <div onclick="window.REM.openDatePicker()" style="display:flex;align-items:center;gap:12px;padding:12px 14px;cursor:pointer;border-bottom:1px solid #3a3f4d;active:background:#333;">
+          <span style="font-size:1.2rem;width:26px;text-align:center;">📅</span>
+          <div style="flex:1;min-width:0;">
+            <div id="rem_date_disp" style="font-size:.9rem;font-weight:700;color:#2196f3;">Tap to set date</div>
+          </div>
+          <button onclick="event.stopPropagation();window.REM.clearDate()" style="background:none;border:none;color:#444;font-size:.9rem;cursor:pointer;padding:2px 6px;line-height:1;">✕</button>
+        </div>
+
+        <!-- Time -->
+        <div onclick="window.REM.openTimePicker()" style="display:flex;align-items:center;gap:12px;padding:12px 14px;cursor:pointer;border-bottom:1px solid #3a3f4d;">
+          <span style="font-size:1.2rem;width:26px;text-align:center;">⏰</span>
+          <div style="flex:1;min-width:0;">
+            <div id="rem_time_disp" style="font-size:.9rem;font-weight:700;color:#2196f3;">09:00 AM</div>
+          </div>
+        </div>
+
+        <!-- Repeat -->
+        <div onclick="window.REM.openRepeat()" style="display:flex;align-items:center;gap:12px;padding:12px 14px;cursor:pointer;">
+          <span style="font-size:1.2rem;width:26px;text-align:center;">🔄</span>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:.62rem;color:#555;text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px;">Repeat</div>
+            <div id="rem_repeat_disp" style="font-size:.85rem;font-weight:600;color:#ccc;">No repeat</div>
+          </div>
+          <span style="color:#444;font-size:.9rem;">›</span>
+        </div>
+      </div>
+
+      <!-- Expiry Date (optional) -->
+      <div style="background:#2a2f3a;border-radius:12px;overflow:hidden;margin-bottom:10px;">
+        <div style="display:flex;align-items:center;gap:12px;padding:11px 14px;">
+          <span style="font-size:1.1rem;width:26px;text-align:center;">📆</span>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:.6rem;color:#555;text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px;">Expiry Date <span style="color:#444;">(optional)</span></div>
+            <input id="rem_exp_date" type="date"
+              style="background:none;border:none;border-bottom:1.5px solid #3d4455;color:#ccc;font-size:.88rem;font-family:'Nunito',sans-serif;outline:none;width:100%;padding:2px 0;color-scheme:dark;">
+          </div>
+          <button onclick="document.getElementById('rem_exp_date').value=''" style="background:none;border:none;color:#444;font-size:.85rem;cursor:pointer;padding:2px 6px;">✕</button>
+        </div>
+      </div>
+
+      <!-- Category + Note — compact row -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
+        <select id="rem_cat_sel" style="background:#2a2f3a;border:1.5px solid #3d4455;color:#fff;padding:9px 10px;border-radius:10px;font-family:'Nunito',sans-serif;font-size:.8rem;outline:none;">
+          <option>📌 Other</option><option>🛂 Passport</option><option>🚗 Driving Licence</option>
+          <option>🛡️ Insurance</option><option>📊 Tax Filing</option><option>💳 Loan/EMI</option>
+          <option>📋 Rent Agreement</option><option>🔁 Subscription</option><option>🎂 Birthday</option>
+          <option>💍 Anniversary</option><option>📞 Call/Follow-up</option><option>💻 Laptop/Device</option>
+          <option>🚘 Vehicle RC</option><option>🪪 PAN Card</option><option>🪪 Aadhaar</option>
+          <option>📌 To Do</option>
+        </select>
+        <select id="rem_person_sel" style="background:#2a2f3a;border:1.5px solid #3d4455;color:#fff;padding:9px 10px;border-radius:10px;font-family:'Nunito',sans-serif;font-size:.8rem;outline:none;"></select>
+      </div>
+
+      <!-- Note input -->
+      <div style="background:#2a2f3a;border-radius:10px;display:flex;align-items:center;padding:2px 12px;border:1.5px solid #3d4455;margin-bottom:6px;">
+        <input id="rem_note_inp" placeholder="Note (optional)"
+          style="flex:1;background:none;border:none;color:#aaa;font-size:.83rem;padding:9px 0;outline:none;font-family:'Nunito',sans-serif;">
+      </div>
+
+    </div><!-- end body -->
+  </div>
+</div>
+
+<!-- ── DATE PICKER POPUP ── -->
+<div id="rem_date_picker" style="display:none;position:fixed;inset:0;z-index:9100;background:rgba(0,0,0,.7);align-items:center;justify-content:center;">
+  <div style="background:#1e2128;border-radius:16px;padding:20px;width:320px;font-family:'Nunito',sans-serif;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+      <button onclick="window.REM.calPrev()" style="background:#2a2f3a;border:none;color:#fff;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:1rem;">‹</button>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:4px;">
+        <span id="rem_cal_title" style="font-weight:800;color:#fff;font-size:.9rem;"></span>
+        <div style="display:flex;align-items:center;gap:4px;">
+          <button onclick="window.REM.calYearPrev()" style="background:#1a1e28;border:none;color:#aaa;border-radius:5px;padding:2px 7px;cursor:pointer;font-size:.75rem;">◀ Yr</button>
+          <select id="rem_year_sel" onchange="window.REM.calSetYear(parseInt(this.value))"
+            style="background:#2a2f3a;border:1px solid #444;color:#fff;border-radius:6px;padding:2px 6px;font-family:'Nunito',sans-serif;font-size:.78rem;cursor:pointer;outline:none;text-align:center;">
+          </select>
+          <button onclick="window.REM.calYearNext()" style="background:#1a1e28;border:none;color:#aaa;border-radius:5px;padding:2px 7px;cursor:pointer;font-size:.75rem;">Yr ▶</button>
+        </div>
+      </div>
+      <button onclick="window.REM.calNext()" style="background:#2a2f3a;border:none;color:#fff;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:1rem;">›</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:8px;">
+      <div style="text-align:center;font-size:.65rem;color:#666;font-weight:700;">S</div>
+      <div style="text-align:center;font-size:.65rem;color:#666;font-weight:700;">M</div>
+      <div style="text-align:center;font-size:.65rem;color:#666;font-weight:700;">T</div>
+      <div style="text-align:center;font-size:.65rem;color:#666;font-weight:700;">W</div>
+      <div style="text-align:center;font-size:.65rem;color:#666;font-weight:700;">T</div>
+      <div style="text-align:center;font-size:.65rem;color:#666;font-weight:700;">F</div>
+      <div style="text-align:center;font-size:.65rem;color:#666;font-weight:700;">S</div>
+    </div>
+    <div id="rem_cal_grid" style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;"></div>
+    <div style="display:flex;gap:8px;margin-top:14px;">
+      <button onclick="window.REM.closeDatePicker()" style="flex:1;background:#3d4455;border:none;color:#fff;border-radius:10px;padding:10px;cursor:pointer;font-family:'Nunito',sans-serif;font-weight:700;">CANCEL</button>
+      <button onclick="window.REM.confirmDate()" style="flex:1;background:#2196f3;border:none;color:#fff;border-radius:10px;padding:10px;cursor:pointer;font-family:'Nunito',sans-serif;font-weight:700;">OK</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── TIME PICKER POPUP ── -->
+<div id="rem_time_picker" style="display:none;position:fixed;inset:0;z-index:9100;background:rgba(0,0,0,.78);align-items:center;justify-content:center;padding:16px;">
+  <div style="background:#1a1d26;border-radius:20px;width:100%;max-width:310px;font-family:'Nunito',sans-serif;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.6);">
+
+    <!-- Title + live preview -->
+    <div style="background:#1e2330;padding:14px 20px 12px;border-bottom:1px solid #2d3340;">
+      <div style="font-size:.6rem;text-transform:uppercase;letter-spacing:.1em;color:#555;font-weight:800;margin-bottom:4px;">⏰ SELECT TIME</div>
+      <div id="rem_time_preview_lbl" style="font-size:2.4rem;font-weight:900;color:#2196f3;letter-spacing:.03em;line-height:1;">9:00 AM</div>
+    </div>
+
+    <!-- Wheels -->
+    <div style="padding:12px 14px 8px;">
+      <div style="display:flex;align-items:flex-end;justify-content:center;gap:6px;margin-bottom:10px;">
+
+        <!-- Hour wheel -->
+        <div style="display:flex;flex-direction:column;align-items:center;flex:1;">
+          <div style="font-size:.58rem;color:#555;text-transform:uppercase;font-weight:700;letter-spacing:.05em;margin-bottom:5px;">HH</div>
+          <div style="position:relative;height:150px;width:100%;background:#13161e;border-radius:10px;overflow:hidden;">
+            <div style="position:absolute;inset:0;background:linear-gradient(#13161e 0%,transparent 30%,transparent 70%,#13161e 100%);z-index:2;pointer-events:none;"></div>
+            <div style="position:absolute;top:50%;left:4px;right:4px;height:44px;transform:translateY(-50%);border-top:2px solid #2196f3;border-bottom:2px solid #2196f3;background:#2196f310;z-index:1;pointer-events:none;border-radius:6px;"></div>
+            <div id="rem_hr_scroll"
+              style="height:100%;overflow-y:scroll;scroll-snap-type:y mandatory;scrollbar-width:none;-webkit-overflow-scrolling:touch;cursor:grab;"
+              onscroll="window.REM._onHrScroll(this)">
+              <div id="rem_hr_items" style="padding:53px 0;"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Colon -->
+        <div style="font-size:1.8rem;font-weight:900;color:#fff;flex-shrink:0;padding-bottom:52px;line-height:1;">:</div>
+
+        <!-- Minute wheel -->
+        <div style="display:flex;flex-direction:column;align-items:center;flex:1;">
+          <div style="font-size:.58rem;color:#555;text-transform:uppercase;font-weight:700;letter-spacing:.05em;margin-bottom:5px;">MM</div>
+          <div style="position:relative;height:150px;width:100%;background:#13161e;border-radius:10px;overflow:hidden;">
+            <div style="position:absolute;inset:0;background:linear-gradient(#13161e 0%,transparent 30%,transparent 70%,#13161e 100%);z-index:2;pointer-events:none;"></div>
+            <div style="position:absolute;top:50%;left:4px;right:4px;height:44px;transform:translateY(-50%);border-top:2px solid #2196f3;border-bottom:2px solid #2196f3;background:#2196f310;z-index:1;pointer-events:none;border-radius:6px;"></div>
+            <div id="rem_min_scroll"
+              style="height:100%;overflow-y:scroll;scroll-snap-type:y mandatory;scrollbar-width:none;-webkit-overflow-scrolling:touch;cursor:grab;"
+              onscroll="window.REM._onMinScroll(this)">
+              <div id="rem_min_items" style="padding:53px 0;"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- AM/PM -->
+        <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0;padding-bottom:8px;">
+          <button id="rem_ampm_am" onclick="window.REM.setAmPm('AM')"
+            style="background:#2196f3;color:#fff;border:none;border-radius:10px;padding:14px 16px;cursor:pointer;font-family:'Nunito',sans-serif;font-weight:800;font-size:.9rem;min-width:58px;touch-action:manipulation;">AM</button>
+          <button id="rem_ampm_pm" onclick="window.REM.setAmPm('PM')"
+            style="background:#2a2f3a;color:#555;border:none;border-radius:10px;padding:14px 16px;cursor:pointer;font-family:'Nunito',sans-serif;font-weight:700;font-size:.9rem;min-width:58px;touch-action:manipulation;">PM</button>
+        </div>
+
+      </div>
+
+      <!-- Quick presets -->
+      <div style="display:flex;gap:5px;flex-wrap:wrap;justify-content:center;padding-top:8px;border-top:1px solid #2a2f3a;">
+        <button onclick="window.REM.setQuickTime(6,0,'AM')"  style="background:#1e2330;border:1px solid #3d4455;color:#aaa;border-radius:8px;padding:5px 9px;font-size:.7rem;cursor:pointer;font-family:'Nunito',sans-serif;touch-action:manipulation;">6 AM</button>
+        <button onclick="window.REM.setQuickTime(9,0,'AM')"  style="background:#1e2330;border:1px solid #3d4455;color:#aaa;border-radius:8px;padding:5px 9px;font-size:.7rem;cursor:pointer;font-family:'Nunito',sans-serif;touch-action:manipulation;">9 AM</button>
+        <button onclick="window.REM.setQuickTime(12,0,'PM')" style="background:#1e2330;border:1px solid #3d4455;color:#aaa;border-radius:8px;padding:5px 9px;font-size:.7rem;cursor:pointer;font-family:'Nunito',sans-serif;touch-action:manipulation;">12 PM</button>
+        <button onclick="window.REM.setQuickTime(3,0,'PM')"  style="background:#1e2330;border:1px solid #3d4455;color:#aaa;border-radius:8px;padding:5px 9px;font-size:.7rem;cursor:pointer;font-family:'Nunito',sans-serif;touch-action:manipulation;">3 PM</button>
+        <button onclick="window.REM.setQuickTime(6,0,'PM')"  style="background:#1e2330;border:1px solid #3d4455;color:#aaa;border-radius:8px;padding:5px 9px;font-size:.7rem;cursor:pointer;font-family:'Nunito',sans-serif;touch-action:manipulation;">6 PM</button>
+        <button onclick="window.REM.setQuickTime(9,0,'PM')"  style="background:#1e2330;border:1px solid #3d4455;color:#aaa;border-radius:8px;padding:5px 9px;font-size:.7rem;cursor:pointer;font-family:'Nunito',sans-serif;touch-action:manipulation;">9 PM</button>
+      </div>
+    </div>
+
+    <!-- CANCEL / OK -->
+    <div style="display:flex;border-top:1px solid #2d3340;">
+      <button onclick="window.REM.closeTimePicker()" style="flex:1;background:transparent;border:none;border-right:1px solid #2d3340;color:#aaa;padding:15px;cursor:pointer;font-family:'Nunito',sans-serif;font-weight:700;font-size:.9rem;touch-action:manipulation;">CANCEL</button>
+      <button onclick="window.REM.confirmTime()"     style="flex:1;background:transparent;border:none;color:#2196f3;padding:15px;cursor:pointer;font-family:'Nunito',sans-serif;font-weight:800;font-size:.9rem;touch-action:manipulation;">OK</button>
+    </div>
+
+    <style>
+      #rem_hr_scroll::-webkit-scrollbar,
+      #rem_min_scroll::-webkit-scrollbar { display:none; }
+    </style>
+  </div>
+</div>
+
+<!-- ── REPEAT POPUP ── -->
+<div id="rem_repeat_popup" style="display:none;position:fixed;inset:0;z-index:9100;background:rgba(0,0,0,.75);align-items:center;justify-content:center;padding:16px;">
+  <div style="background:#1e2128;border-radius:18px;padding:0;width:100%;max-width:340px;font-family:'Nunito',sans-serif;max-height:90vh;overflow-y:auto;-webkit-overflow-scrolling:touch;">
+
+    <!-- Header -->
+    <div style="padding:16px 18px 14px;border-bottom:1px solid #2a2f3a;">
+      <div style="font-size:1rem;font-weight:800;color:#2196f3;">🔁 Repeat Settings</div>
+      <div style="font-size:.72rem;color:#555;margin-top:2px;">Same as Android / iOS reminders</div>
+    </div>
+
+    <div style="padding:14px 16px;">
+
+      <!-- ── Frequency type ── -->
+      <div style="font-size:.68rem;color:#666;font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">Frequency</div>
+      <select id="rem_repeat_type_sel" onchange="window.REM.updateRepeatUI()" style="width:100%;background:#2a2f3a;border:1.5px solid #3d4455;color:#fff;padding:10px 13px;border-radius:10px;font-family:'Nunito',sans-serif;font-size:.88rem;outline:none;margin-bottom:14px;">
+        <option value="none">No Repeat</option>
+        <option value="hourly">Repeat Hourly</option>
+        <option value="daily">Repeat Daily</option>
+        <option value="weekdays">Weekdays Only (Mon – Fri)</option>
+        <option value="weekends">Weekends Only (Sat &amp; Sun)</option>
+        <option value="weekly">Repeat Weekly</option>
+        <option value="biweekly">Bi-Weekly (Every 2 Weeks)</option>
+        <option value="monthly">Repeat Monthly</option>
+        <option value="quarterly">Every 3 Months (Quarterly)</option>
+        <option value="halfyearly">Every 6 Months (Half-Yearly)</option>
+        <option value="yearly">Repeat Yearly</option>
+        <option value="custom">Custom Interval</option>
+      </select>
+
+      <!-- ── INTERVAL: "Every N unit(s)" — shown for hourly/daily/weekly/biweekly/custom ── -->
+      <div id="rrp_interval_row" style="display:none;align-items:center;gap:10px;background:#2a2f3a;border-radius:10px;padding:11px 13px;margin-bottom:10px;">
+        <span style="font-size:.72rem;color:#888;font-weight:700;text-transform:uppercase;white-space:nowrap;">EVERY</span>
+        <input id="rem_repeat_every" type="number" min="1" max="365" value="1" oninput="window.REM._onEveryChange()"
+          style="background:#1e2128;border:1.5px solid #3d4455;color:#fff;border-radius:7px;padding:6px 10px;width:64px;font-family:'Nunito',sans-serif;font-size:.95rem;outline:none;text-align:center;flex-shrink:0;">
+        <span id="rem_repeat_unit" style="color:#ccc;font-size:.88rem;">hour(s)</span>
+      </div>
+
+      <!-- ── WEEKLY: day-of-week circular buttons ── -->
+      <div id="rrp_days_row" style="display:none;margin-bottom:10px;">
+        <div style="font-size:.68rem;color:#666;font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">Repeat on days</div>
+        <div style="display:flex;gap:6px;justify-content:space-between;">
+          <button type="button" onclick="window.REM._toggleDay(0)" id="rrpd_0" data-day="0" class="rrp-day-btn" style="flex:1;height:38px;border-radius:50%;border:1.5px solid #3d4455;background:#2a2f3a;color:#aaa;font-size:.75rem;font-weight:800;cursor:pointer;font-family:'Nunito',sans-serif;transition:all .15s;">S</button>
+          <button type="button" onclick="window.REM._toggleDay(1)" id="rrpd_1" data-day="1" class="rrp-day-btn" style="flex:1;height:38px;border-radius:50%;border:1.5px solid #3d4455;background:#2a2f3a;color:#aaa;font-size:.75rem;font-weight:800;cursor:pointer;font-family:'Nunito',sans-serif;transition:all .15s;">M</button>
+          <button type="button" onclick="window.REM._toggleDay(2)" id="rrpd_2" data-day="2" class="rrp-day-btn" style="flex:1;height:38px;border-radius:50%;border:1.5px solid #3d4455;background:#2a2f3a;color:#aaa;font-size:.75rem;font-weight:800;cursor:pointer;font-family:'Nunito',sans-serif;transition:all .15s;">T</button>
+          <button type="button" onclick="window.REM._toggleDay(3)" id="rrpd_3" data-day="3" class="rrp-day-btn" style="flex:1;height:38px;border-radius:50%;border:1.5px solid #3d4455;background:#2a2f3a;color:#aaa;font-size:.75rem;font-weight:800;cursor:pointer;font-family:'Nunito',sans-serif;transition:all .15s;">W</button>
+          <button type="button" onclick="window.REM._toggleDay(4)" id="rrpd_4" data-day="4" class="rrp-day-btn" style="flex:1;height:38px;border-radius:50%;border:1.5px solid #3d4455;background:#2a2f3a;color:#aaa;font-size:.75rem;font-weight:800;cursor:pointer;font-family:'Nunito',sans-serif;transition:all .15s;">T</button>
+          <button type="button" onclick="window.REM._toggleDay(5)" id="rrpd_5" data-day="5" class="rrp-day-btn" style="flex:1;height:38px;border-radius:50%;border:1.5px solid #3d4455;background:#2a2f3a;color:#aaa;font-size:.75rem;font-weight:800;cursor:pointer;font-family:'Nunito',sans-serif;transition:all .15s;">F</button>
+          <button type="button" onclick="window.REM._toggleDay(6)" id="rrpd_6" data-day="6" class="rrp-day-btn" style="flex:1;height:38px;border-radius:50%;border:1.5px solid #3d4455;background:#2a2f3a;color:#aaa;font-size:.75rem;font-weight:800;cursor:pointer;font-family:'Nunito',sans-serif;transition:all .15s;">S</button>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:0 2px;margin-top:3px;">
+          <span style="font-size:.58rem;color:#555;flex:1;text-align:center;">Sun</span>
+          <span style="font-size:.58rem;color:#555;flex:1;text-align:center;">Mon</span>
+          <span style="font-size:.58rem;color:#555;flex:1;text-align:center;">Tue</span>
+          <span style="font-size:.58rem;color:#555;flex:1;text-align:center;">Wed</span>
+          <span style="font-size:.58rem;color:#555;flex:1;text-align:center;">Thu</span>
+          <span style="font-size:.58rem;color:#555;flex:1;text-align:center;">Fri</span>
+          <span style="font-size:.58rem;color:#555;flex:1;text-align:center;">Sat</span>
+        </div>
+      </div>
+
+      <!-- ── MONTHLY sub-mode: By Date OR By Weekday ── -->
+      <div id="rrp_monthly_row" style="display:none;margin-bottom:10px;">
+        <div style="font-size:.68rem;color:#666;font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">Repeat on</div>
+        <!-- Mode toggle -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;border:1.5px solid #3d4455;border-radius:9px;overflow:hidden;margin-bottom:10px;">
+          <button type="button" id="rrp_mode_date_btn" onclick="window.REM._setMonthMode('date')"
+            style="padding:8px;border:none;background:#2196f3;color:#fff;font-size:.78rem;font-weight:800;cursor:pointer;font-family:'Nunito',sans-serif;">📅 By Date</button>
+          <button type="button" id="rrp_mode_wday_btn" onclick="window.REM._setMonthMode('weekday')"
+            style="padding:8px;border:none;background:#2a2f3a;color:#888;font-size:.78rem;font-weight:800;cursor:pointer;font-family:'Nunito',sans-serif;">📆 By Weekday</button>
+        </div>
+        <!-- Mode A: By date (day number) -->
+        <div id="rrp_bydate_row" style="display:flex;align-items:center;gap:10px;">
+          <span style="font-size:.8rem;color:#aaa;white-space:nowrap;">On day</span>
+          <select id="rem_repeat_month_day" onchange="window.REM._onMonthDayChange()" style="flex:1;background:#2a2f3a;border:1.5px solid #3d4455;color:#fff;padding:8px 10px;border-radius:8px;font-family:'Nunito',sans-serif;font-size:.85rem;outline:none;"></select>
+          <span style="font-size:.8rem;color:#aaa;white-space:nowrap;">of every month</span>
+        </div>
+        <!-- Mode B: By weekday (1st Monday etc.) -->
+        <div id="rrp_byweekday_row" style="display:none;gap:8px;flex-direction:column;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-size:.8rem;color:#aaa;white-space:nowrap;">On the</span>
+            <select id="rem_repeat_month_week" onchange="window.REM._onMonthWkChange()" style="flex:1;background:#2a2f3a;border:1.5px solid #3d4455;color:#fff;padding:8px 10px;border-radius:8px;font-family:'Nunito',sans-serif;font-size:.85rem;outline:none;">
+              <option value="1">First</option>
+              <option value="2">Second</option>
+              <option value="3">Third</option>
+              <option value="4">Fourth</option>
+              <option value="5">Last</option>
+            </select>
+            <select id="rem_repeat_month_weekday" onchange="window.REM._onMonthWkChange()" style="flex:1;background:#2a2f3a;border:1.5px solid #3d4455;color:#fff;padding:8px 10px;border-radius:8px;font-family:'Nunito',sans-serif;font-size:.85rem;outline:none;">
+              <option value="0">Sunday</option>
+              <option value="1">Monday</option>
+              <option value="2">Tuesday</option>
+              <option value="3">Wednesday</option>
+              <option value="4">Thursday</option>
+              <option value="5">Friday</option>
+              <option value="6">Saturday</option>
+            </select>
+          </div>
+          <span style="font-size:.78rem;color:#555;">of every month</span>
+        </div>
+      </div>
+
+      <!-- ── ENDS section ── -->
+      <div id="rrp_ends_section" style="display:none;background:#2a2f3a;border-radius:10px;padding:11px 13px;margin-bottom:14px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+          <span style="font-size:.72rem;color:#888;font-weight:700;text-transform:uppercase;">ENDS</span>
+          <select id="rem_repeat_ends" onchange="window.REM._onEndsChange()" style="background:#1e2128;border:1.5px solid #3d4455;color:#fff;border-radius:7px;padding:6px 10px;font-family:'Nunito',sans-serif;font-size:.82rem;outline:none;">
+            <option value="never">Never</option>
+            <option value="count">After N times</option>
+            <option value="date">On date</option>
+          </select>
+        </div>
+        <!-- After N times -->
+        <div id="rrp_ends_count_row" style="display:none;align-items:center;gap:10px;">
+          <span style="font-size:.82rem;color:#aaa;">After</span>
+          <input id="rem_repeat_count" type="number" min="1" max="999" value="10"
+            style="background:#1e2128;border:1.5px solid #3d4455;color:#fff;border-radius:7px;padding:6px 10px;width:70px;font-family:'Nunito',sans-serif;font-size:.9rem;outline:none;text-align:center;">
+          <span style="font-size:.82rem;color:#aaa;">occurrences</span>
+        </div>
+        <!-- On date -->
+        <div id="rrp_ends_date_row" style="display:none;align-items:center;gap:10px;">
+          <span style="font-size:.82rem;color:#aaa;">On</span>
+          <input id="rem_repeat_end_date" type="date"
+            style="background:#1e2128;border:1.5px solid #3d4455;color:#fff;border-radius:7px;padding:6px 10px;font-family:'Nunito',sans-serif;font-size:.82rem;outline:none;flex:1;">
+        </div>
+      </div>
+
+      <!-- ── Live preview ── -->
+      <div id="rrp_preview" style="display:none;background:#1a2a1a;border:1px solid #2e4a2e;border-radius:9px;padding:9px 13px;margin-bottom:14px;font-size:.8rem;color:#7ec87e;font-style:italic;">
+      </div>
+
+    </div><!-- end padding -->
+
+    <!-- Footer buttons -->
+    <div style="display:flex;gap:8px;padding:12px 16px;border-top:1px solid #2a2f3a;">
+      <button type="button" onclick="window.REM.closeRepeatPopup()" style="flex:1;background:transparent;border:1.5px solid #e53935;color:#e53935;border-radius:10px;padding:11px;cursor:pointer;font-family:'Nunito',sans-serif;font-weight:800;font-size:.88rem;">Cancel</button>
+      <button type="button" onclick="window.REM.confirmRepeat()" style="flex:2;background:#2196f3;border:none;color:#fff;border-radius:10px;padding:11px;cursor:pointer;font-family:'Nunito',sans-serif;font-weight:800;font-size:.88rem;">✓ Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- Patient ADD -->
+<div class="overlay" id="patM"><div class="modal" style="max-width:480px;">
+  <h2 id="patMT">👤 Add Patient / Family Member</h2>
+  <div class="fgrid">
+    <div class="fg"><label>Name *</label><input id="ptm_name"></div>
+    <div class="fg"><label>Relation</label><input id="ptm_rel" placeholder="Self / Wife / Son…"></div>
+    <div class="fg"><label>📅 Date of Birth (DD/MM/YYYY)</label><div id="ptm_dob_wrap"></div></div>
+    <div class="fg"><label>Blood Group</label><select id="ptm_blood"><option value="">—</option><option>A+</option><option>A-</option><option>B+</option><option>B-</option><option>AB+</option><option>AB-</option><option>O+</option><option>O-</option></select></div>
+    <div class="full fg"><label>Known Conditions / Allergies</label><textarea id="ptm_cond" placeholder="Diabetes, Hypertension, Penicillin allergy…"></textarea></div>
+    <div class="fg"><label>Emergency Contact</label><input id="ptm_emg" placeholder="Name: Phone"></div>
+    <div class="fg"><label>Insurance Policy No.</label><input id="ptm_ins" placeholder="Policy number"></div>
+  </div>
+  <div class="modal-foot"><button class="btn b-out" type="button" onclick="M.close('patM')">Cancel</button><button id="ptm_save_btn" class="btn b-gold" type="button" data-app-action="savePatient">Save Patient</button></div>
+</div></div>
+
+<!-- Doctor Visit / Medical Record -->
+<div class="overlay" id="medM"><div class="modal" style="max-width:680px;">
+  <h2 id="medMT">🏥 Add Doctor Visit</h2>
+  <div style="background:#f0faf5;border-radius:8px;padding:8px 13px;margin-bottom:12px;font-size:.78rem;color:var(--grn);">📅 All dates in <b>DD/MM/YYYY</b> format — type or click 📅 to pick</div>
+  <div class="fgrid">
+    <div class="fg"><label>Patient *</label><select id="mdm_pat"></select></div>
+    <div class="fg">
+      <label>Visit Type</label>
+      <div style="display:flex;gap:6px;align-items:center;">
+        <select id="mdm_type" style="flex:1;background:var(--bg);border:1.5px solid var(--bdr2);color:var(--txt);padding:8px 11px;border-radius:7px;font-family:'Nunito',sans-serif;font-size:.85rem;outline:none;">
+          <option>General Checkup</option><option>Follow-up</option><option>Lab Test</option>
+          <option>Specialist Consultation</option><option>Emergency</option><option>Vaccination</option>
+          <option>Surgery/Procedure</option><option>Dental</option><option>Eye Checkup</option>
+          <option>Physiotherapy</option><option>Dermatology</option><option>Psychiatry</option>
+        </select>
+        <button type="button" onclick="APP._addCustomVisitType()" class="btn b-gold" style="padding:8px 11px;white-space:nowrap;" title="Add custom visit type">➕</button>
+      </div>
+    </div>
+    <div class="fg"><label>Doctor Name</label><input id="mdm_doc" placeholder="Dr. Full Name"></div>
+    <div class="fg"><label>Specialization</label><input id="mdm_spec" placeholder="Cardiologist, GP…"></div>
+    <div class="fg"><label>Hospital / Clinic</label><input id="mdm_hosp" placeholder="Hospital name"></div>
+    <div class="fg"><label>City</label><input id="mdm_city" placeholder="City"></div>
+    <div class="fg"><label>📅 Visit Date * (DD/MM/YYYY)</label><div id="mdm_date_wrap"></div></div>
+    <div class="fg"><label>📅 Next Follow-up Date (DD/MM/YYYY)</label><div id="mdm_next_wrap"></div></div>
+    <div class="full fg"><label>Illness / Purpose of Visit</label><input id="mdm_purpose" placeholder="e.g. Chest pain, Routine BP check, Knee pain"></div>
+    <div class="full fg"><label>💊 Prescription / Medications</label><textarea id="mdm_meds" placeholder="Amlodipine 5mg 1-0-1, Metformin 500mg 1-1-1…"></textarea></div>
+    <div class="full fg"><label>Vital Signs (BP, Sugar, Weight…)</label><input id="mdm_vitals" placeholder="BP: 130/85, Sugar: 110 mg/dL, Weight: 72 kg"></div>
+  </div>
+  <hr style="border:none;border-top:1px solid var(--bdr);margin:12px 0;">
+  <div style="font-family:'JetBrains Mono',monospace;font-size:.68rem;color:var(--mut);margin-bottom:10px;text-transform:uppercase;letter-spacing:.06em;">🧪 Lab Tests</div>
+  <div class="fgrid">
+    <div class="fg"><label>Lab Test Name</label><input id="mdm_labname" placeholder="CBC, LFT, HbA1c, X-Ray…"></div>
+    <div class="fg"><label>📅 Lab Test Date (DD/MM/YYYY)</label><div id="mdm_labdate_wrap"></div></div>
+    <div class="full fg"><label>Lab Results / Values</label><textarea id="mdm_labres" placeholder="Hb: 13.5 g/dL, WBC: 7200, Blood Sugar: 95 mg/dL…" style="min-height:50px;"></textarea></div>
+  </div>
+  <hr style="border:none;border-top:1px solid var(--bdr);margin:12px 0;">
+  <div style="font-family:'JetBrains Mono',monospace;font-size:.68rem;color:var(--mut);margin-bottom:10px;text-transform:uppercase;letter-spacing:.06em;">📎 Documents & Attachments</div>
+  <div style="background:#f0f7ff;border-radius:8px;padding:9px 13px;margin-bottom:10px;font-size:.78rem;color:var(--blu);">
+    📤 PDF, JPG, PNG, Word, Excel — directly Firebase Storage mein upload hoga. Max 10MB per file.
+  </div>
+  <div class="fgrid">
+    <div class="full fg"><label>📄 Prescription / Visit Reports</label>
+      <div id="fu_med_pres_wrap"></div>
+    </div>
+    <div class="full fg"><label>🧪 Lab Test Reports</label>
+      <div id="fu_med_lab_wrap"></div>
+    </div>
+    <div class="full fg"><label>Notes / Follow-up Instructions</label><textarea id="mdm_notes" placeholder="Doctor's instructions, lifestyle advice…"></textarea></div>
+  </div>
+  <div class="modal-foot"><button class="btn b-out" type="button" onclick="M.close('medM')">Cancel</button><button id="mdm_save_btn" class="btn b-gold" type="button" data-app-action="saveMedRecord">Save Record</button></div>
+</div></div>
+
+<!-- Travel -->
+<div class="overlay" id="tvM"><div class="modal">
+  <h2 id="tvMT">✈️ Add Trip</h2>
+  <div style="background:#f0faf5;border-radius:8px;padding:8px 13px;margin-bottom:12px;font-size:.78rem;color:var(--grn);">📅 Dates in <b>DD/MM/YYYY</b> — type directly or click 📅</div>
+  <div class="fgrid">
+    <div class="fg"><label>Destination *</label><input id="tvm_dest" placeholder="Goa, Maldives…"></div>
+    <div class="fg"><label>City / Region</label><input id="tvm_city" placeholder="Panaji, Goa"></div>
+    <div class="fg"><label>Trip Type</label><select id="tvm_type"><option>Family</option><option>Business</option><option>Solo</option><option>Friends</option><option>Honeymoon</option></select></div>
+    <div class="fg"><label>Domestic / International</label><select id="tvm_dom"><option value="Domestic">Domestic</option><option value="International">International</option></select></div>
+    <div class="fg"><label>📅 Departure (DD/MM/YYYY)</label><div id="tvm_dep_wrap"></div></div>
+    <div class="fg"><label>📅 Return (DD/MM/YYYY)</label><div id="tvm_ret_wrap"></div></div>
+    <div class="fg"><label>Transport</label><select id="tvm_trans"><option>Flight</option><option>Train</option><option>Car</option><option>Bus</option><option>Cruise</option></select></div>
+    <div class="fg"><label>Ticket / PNR No.</label><input id="tvm_ticket"></div>
+    <div class="fg"><label>Hotel / Stay</label><input id="tvm_hotel"></div>
+    <div class="fg"><label>Hotel City</label><input id="tvm_hcity"></div>
+    <div class="fg"><label>Budget (₹)</label><input id="tvm_budget" type="number"></div>
+    <div class="fg"><label>Actual Spent (₹)</label><input id="tvm_spent" type="number"></div>
+    <div class="full fg"><label>Members</label><input id="tvm_members" placeholder="Raman, Priya, Kids…"></div>
+    <div class="full fg"><label>📎 Ticket / Photo / Doc Upload (Firebase)</label><div id="fu_travel_doc_wrap"></div></div>
+    <div class="full fg"><label>Notes / Itinerary</label><textarea id="tvm_notes"></textarea></div>
+  </div>
+  <div class="modal-foot"><button class="btn b-out" type="button" onclick="M.close('tvM')">Cancel</button><button id="tvm_save_btn" class="btn b-gold" type="button" data-app-action="saveTrip">Save Trip</button></div>
+</div></div>
+
+<!-- Expense / Income / Transfer ADD -->
+<div class="overlay" id="expM" data-noclose="1">
+  <!-- FIX: flex column layout so footer always visible -->
+  <div class="modal" style="max-width:520px;padding:0;display:flex;flex-direction:column;max-height:min(92vh,calc(100dvh - 70px));overflow:hidden;">
+
+    <!-- HEADER: Type tabs — Money Pro style -->
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;flex-shrink:0;background:var(--dim);border-bottom:1.5px solid var(--bdr);border-radius:12px 12px 0 0;overflow:hidden;">
+      <button id="exm_tab_expense" onclick="APP._setExpType('expense')"
+        style="padding:12px 6px;border:none;border-bottom:3px solid #e53935;background:var(--card);color:#e53935;font-size:.82rem;font-weight:800;cursor:pointer;font-family:'Nunito',sans-serif;">
+        💸 Expense
+      </button>
+      <button id="exm_tab_income" onclick="APP._setExpType('income')"
+        style="padding:12px 6px;border:none;border-bottom:3px solid transparent;background:var(--dim);color:var(--mut);font-size:.82rem;font-weight:700;cursor:pointer;font-family:'Nunito',sans-serif;">
+        💰 Income
+      </button>
+      <button id="exm_tab_transfer" onclick="APP._setExpType('transfer')"
+        style="padding:12px 6px;border:none;border-bottom:3px solid transparent;background:var(--dim);color:var(--mut);font-size:.82rem;font-weight:700;cursor:pointer;font-family:'Nunito',sans-serif;">
+        🔄 Transfer
+      </button>
+    </div>
+    <input type="hidden" id="exm_type" value="expense">
+
+    <!-- SCROLLABLE BODY — all form fields -->
+    <div style="flex:1;overflow-y:auto;padding:14px 16px;-webkit-overflow-scrolling:touch;">
+
+      <!-- Amount — big prominent -->
+      <div style="text-align:center;margin-bottom:14px;">
+        <div style="font-size:.62rem;text-transform:uppercase;letter-spacing:.08em;color:var(--mut);font-weight:700;margin-bottom:5px;">AMOUNT (₹) *</div>
+        <input id="exm_amt" type="number" inputmode="decimal" placeholder="0"
+          style="width:100%;text-align:center;font-size:1.9rem;font-weight:900;font-family:'JetBrains Mono',monospace;color:var(--txt);background:var(--dim);border:2px solid var(--bdr2);border-radius:12px;padding:10px 14px;outline:none;box-sizing:border-box;transition:border-color .15s;"
+          onfocus="this.style.borderColor='var(--acc)'" onblur="this.style.borderColor='var(--bdr2)'" oninput="APP._updateTdsPreview()">
+      </div>
+
+      <!-- Category Dropdown (compact) -->
+      <div style="margin-bottom:10px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
+          <div style="font-size:.62rem;text-transform:uppercase;letter-spacing:.08em;color:var(--mut);font-weight:700;">CATEGORY *</div>
+          <button type="button" onclick="APP._addCustomCat()"
+            style="background:var(--acc);color:#fff;border:none;border-radius:5px;padding:3px 9px;font-size:.7rem;font-weight:700;cursor:pointer;font-family:'Nunito',sans-serif;">+ New</button>
+        </div>
+        <!-- Dropdown replaces grid — compact, no scroll -->
+        <select id="exm_cat_sel" onchange="document.getElementById('exm_cat').value=this.value"
+          style="width:100%;background:var(--bg);border:1.5px solid var(--bdr2);color:var(--txt);padding:8px 11px;border-radius:8px;font-family:'Nunito',sans-serif;font-size:.84rem;outline:none;">
+        </select>
+        <input type="hidden" id="exm_cat" value="">
+        <!-- Keep hidden grid div for JS compat -->
+        <div id="exm_cat_grid" style="display:none;"></div>
+        <div id="exm_custom_cat_row" style="display:none;margin-top:7px;background:var(--dim);border-radius:9px;padding:9px;">
+          <div style="font-size:.72rem;font-weight:700;color:var(--grn);margin-bottom:6px;">✨ New Category</div>
+          <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">
+            <input id="exm_new_cat_emoji" placeholder="🏷" style="width:38px;text-align:center;background:var(--bg);border:1.5px solid var(--bdr2);color:var(--txt);padding:5px;border-radius:6px;font-size:.9rem;">
+            <input id="exm_new_cat_name" placeholder="Category name..." style="flex:1;background:var(--bg);border:1.5px solid var(--bdr2);color:var(--txt);padding:6px 9px;border-radius:6px;font-size:.82rem;font-family:'Nunito',sans-serif;">
+          </div>
+          <div style="display:flex;gap:6px;">
+            <button type="button" onclick="APP._saveCustomCat()" class="btn b-grn" style="font-size:.72rem;padding:4px 10px;">💾 Save</button>
+            <button type="button" onclick="APP._cancelCustomCat()" class="btn b-out" style="font-size:.72rem;padding:4px 10px;">Cancel</button>
+            <button type="button" onclick="APP._showManageCats()" class="btn b-out" style="font-size:.72rem;padding:4px 8px;margin-left:auto;">⚙</button>
+            <input type="hidden" id="exm_new_cat_type" value="expense">
+          </div>
+        </div>
+      </div>
+
+      <!-- Date + Mode + Account — compact 3 fields in 2 rows -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+        <div>
+          <div style="font-size:.6rem;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);font-weight:700;margin-bottom:4px;">📅 DATE</div>
+          <div id="exm_date_wrap"></div>
+        </div>
+        <div>
+          <div style="font-size:.6rem;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);font-weight:700;margin-bottom:4px;">💳 MODE</div>
+          <select id="exm_paymode" style="width:100%;background:var(--bg);border:1.5px solid var(--bdr2);color:var(--txt);padding:7px 8px;border-radius:7px;font-family:'Nunito',sans-serif;font-size:.8rem;outline:none;">
+            <option>Cash</option><option>UPI</option><option>Debit Card</option><option>Credit Card</option><option>Net Banking</option><option>Cheque</option><option>NEFT/RTGS</option><option>Other</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Account row — label changes by type -->
+      <div id="exm_account_row" style="margin-bottom:8px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+          <div id="exm_account_label" style="font-size:.6rem;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);font-weight:700;">🏦 Account — Debit (Diya Hai)</div>
+          <button type="button" onclick="APP._exmAddAccount()"
+            style="background:var(--acc);color:#fff;border:none;border-radius:5px;padding:2px 8px;font-size:.67rem;font-weight:700;cursor:pointer;font-family:'Nunito',sans-serif;">+ New</button>
+        </div>
+        <select id="exm_account" style="width:100%;background:var(--bg);border:1.5px solid var(--bdr2);color:var(--txt);padding:7px 9px;border-radius:7px;font-family:'Nunito',sans-serif;font-size:.82rem;outline:none;">
+          <option value="">— Select Account —</option>
+        </select>
+      </div>
+
+      <!-- Transfer: From + To accounts — shown only for Transfer type -->
+      <div id="exm_transfer_row" style="display:none;margin-bottom:10px;background:var(--dim);border-radius:10px;padding:11px 12px;">
+        <div style="font-size:.62rem;text-transform:uppercase;letter-spacing:.07em;color:#1565c0;font-weight:800;margin-bottom:9px;">🔄 TRANSFER ACCOUNTS</div>
+        <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:6px;align-items:center;margin-bottom:6px;">
+          <div>
+            <div style="font-size:.6rem;color:var(--mut);font-weight:700;margin-bottom:3px;">FROM Account</div>
+            <select id="exm_from_acc" style="width:100%;background:var(--bg);border:1.5px solid #90b8e8;color:var(--txt);padding:7px 9px;border-radius:7px;font-family:'Nunito',sans-serif;font-size:.8rem;outline:none;">
+              <option value="">— From —</option>
+            </select>
+          </div>
+          <div style="font-size:1rem;color:#1565c0;font-weight:700;padding-top:14px;">→</div>
+          <div>
+            <div style="font-size:.6rem;color:var(--mut);font-weight:700;margin-bottom:3px;">TO Account</div>
+            <select id="exm_to_acc" style="width:100%;background:var(--bg);border:1.5px solid #90b8e8;color:var(--txt);padding:7px 9px;border-radius:7px;font-family:'Nunito',sans-serif;font-size:.8rem;outline:none;">
+              <option value="">— To —</option>
+            </select>
+          </div>
+        </div>
+        <div id="exm_transfer_preview" style="font-size:.72rem;color:#1565c0;font-weight:700;text-align:center;padding:4px;"></div>
+        <button type="button" onclick="APP._exmAddAccount()"
+          style="margin-top:4px;background:none;border:none;color:var(--acc);font-size:.68rem;font-weight:700;cursor:pointer;font-family:'Nunito',sans-serif;">+ Add New Account</button>
+      </div>
+
+      <!-- Note compact -->
+      <div style="margin-bottom:8px;">
+        <div style="font-size:.6rem;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);font-weight:700;margin-bottom:4px;">📝 NOTE</div>
+        <input id="exm_note" placeholder="Optional note…"
+          style="width:100%;background:var(--bg);border:1.5px solid var(--bdr2);color:var(--txt);padding:7px 9px;border-radius:7px;font-family:'Nunito',sans-serif;font-size:.82rem;outline:none;box-sizing:border-box;">
+      </div>
+
+      <!-- File Attachments — compact thumbnails -->
+      <div style="margin-bottom:4px;">
+        <div style="font-size:.6rem;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);font-weight:700;margin-bottom:6px;">📎 ATTACHMENTS (optional)</div>
+        <!-- Compact upload zone -->
+        <label id="exm_file_lbl" style="display:flex;align-items:center;gap:8px;background:var(--dim);border:1.5px dashed var(--bdr2);border-radius:8px;padding:8px 12px;cursor:pointer;font-size:.78rem;color:var(--mut);">
+          <span style="font-size:1rem;">📎</span>
+          <span>Tap to attach files (JPG, PNG, PDF, Word, Excel)</span>
+          <input type="file" id="exm_file_input" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx" style="display:none;" onchange="APP._exmHandleFiles(this.files)">
+        </label>
+        <!-- Thumbnails preview row -->
+        <div id="exm_file_previews" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;"></div>
+      </div>
+
+    </div><!-- end scrollable body -->
+
+    <!-- STICKY FOOTER — always visible, never hidden -->
+    <div style="flex-shrink:0;display:flex;gap:8px;padding:11px 16px 13px;border-top:1.5px solid var(--bdr);background:var(--card);border-radius:0 0 12px 12px;">
+      <button class="btn b-out" type="button" onclick="M.close('expM')" style="flex:1;padding:10px;font-size:.88rem;">Cancel</button>
+      <button id="exm_del_btn" class="btn b-red" style="display:none;padding:10px 14px;" onclick="APP.deleteCurrentExpense()">🗑</button>
+      <button id="exm_save_btn" class="btn b-gold" type="button" data-app-action="saveExpense" style="flex:2;padding:10px;font-size:.92rem;font-weight:800;">Save Transaction</button>
+    </div>
+
+    <!-- Hidden compat fields -->
+    <div id="exm_loan_fields" style="display:none;pointer-events:none;height:0;overflow:hidden;">
+      <input id="exm_borrower"><input id="exm_loan_phone"><div id="exm_loan_due_wrap"></div>
+      <select id="exm_loan_status"><option value="receivable"></option><option value="received"></option><option value="partial"></option></select>
+      <input id="exm_loan_received"><div id="exm_loan_partial_row"></div>
+      <input id="exm_loan_name_label" type="hidden"><input id="exm_borrower_label" type="hidden">
+    </div>
+
+  </div>
+</div>
+
+<!-- Bucket List -->
+<div class="overlay" id="bkM"><div class="modal" style="max-width:420px;">
+  <h2>🌟 Bucket List</h2>
+  <div class="fg"><label>Destination *</label><input id="bkm_dest"></div>
+  <div class="fg"><label>Priority</label><select id="bkm_pri"><option value="high">🔴 High</option><option value="medium">🟡 Medium</option><option value="low">🟢 Low</option></select></div>
+  <div class="fg"><label>Target Year</label><input id="bkm_year"></div>
+  <div class="fg"><label>Notes / Dream</label><textarea id="bkm_notes"></textarea></div>
+  <div class="modal-foot"><button class="btn b-out" type="button" onclick="M.close('bkM')">Cancel</button><button id="bkm_save_btn" class="btn b-gold" type="button" data-app-action="saveBucket">Add Destination</button></div>
+</div></div>
+
+<!-- Confirm Delete -->
+<div class="overlay" id="delM"><div class="modal" style="max-width:340px;">
+  <h2>⚠️ Confirm Delete</h2>
+  <p style="color:var(--mut);font-size:.86rem;margin-bottom:6px;" id="delMsg">Are you sure?</p>
+  <div class="modal-foot"><button class="btn b-out" onclick="M.close('delM')">Cancel</button><button class="btn b-red" onclick="APP.confirmDel()">🗑 Delete</button></div>
+</div></div>
+
+<!-- Generic detail modal used by document and attachment previews -->
+<div class="overlay" id="eiM"><div class="modal" style="max-width:560px;">
+  <h2 id="eiMT">Details</h2>
+  <div id="eiMB"></div>
+</div></div>
+
+<!-- LOGIN -->
+<div class="overlay" id="loginM" style="z-index:999;background:rgba(0,0,0,.7);">
+  <div class="modal" style="max-width:380px;text-align:center;">
+    <div style="font-family:'Playfair Display',serif;font-size:2rem;font-weight:900;color:var(--acc);margin-bottom:4px;">R</div>
+    <h2 style="margin-bottom:4px;">Raman Kumar Dashboard</h2>
+    <p style="color:var(--mut);font-size:.82rem;margin-bottom:20px;">Please enter your password to continue</p>
+    <div id="_loginMain">
+      <input id="loginPwd" type="password" placeholder="Enter password…" style="width:100%;background:var(--bg);border:1.5px solid var(--bdr2);border-radius:9px;padding:11px 14px;font-family:'Nunito',sans-serif;font-size:1rem;outline:none;text-align:center;letter-spacing:.15em;margin-bottom:12px;"
+        onkeydown="if(event.keyCode===13)APP.doLogin()">
+      <button class="btn b-gold" style="width:100%;padding:10px;" onclick="APP.doLogin()">🔓 Login</button>
+      <div id="loginErr" style="color:var(--red);font-size:.8rem;margin-top:8px;display:none;">❌ Wrong password! Try again.</div>
+      <button onclick="APP._showForgotPwd()" style="background:none;border:none;color:var(--acc);font-size:.78rem;cursor:pointer;margin-top:12px;text-decoration:underline;">🔑 Forgot password?</button>
+    </div>
+    <div id="_loginForgot" style="display:none;">
+      <div style="background:#fff8ee;border:1.5px solid #e8a060;border-radius:10px;padding:16px;margin-bottom:12px;text-align:left;">
+        <div style="font-weight:800;font-size:.9rem;color:#8a6500;margin-bottom:10px;">🔑 Password Reset</div>
+        <label style="font-size:.78rem;font-weight:700;color:var(--mut);display:block;margin-bottom:4px;">आपके पिता का नाम क्या है? (What is your father's name?)</label>
+        <input id="_forgotAns" type="text" placeholder="Answer..." style="width:100%;border:1.5px solid var(--bdr2);border-radius:7px;padding:8px 11px;font-family:'Nunito',sans-serif;font-size:.9rem;margin-bottom:8px;">
+        <label style="font-size:.78rem;font-weight:700;color:var(--mut);display:block;margin-bottom:4px;">New Password</label>
+        <input id="_forgotNew" type="password" placeholder="Enter new password..." style="width:100%;border:1.5px solid var(--bdr2);border-radius:7px;padding:8px 11px;font-family:'Nunito',sans-serif;font-size:.9rem;margin-bottom:10px;">
+        <button onclick="APP._doForgotPwd()" class="btn b-gold" style="width:100%;padding:9px;">✅ Reset Password</button>
+        <div id="_forgotErr" style="color:var(--red);font-size:.78rem;margin-top:6px;display:none;"></div>
+      </div>
+      <button onclick="APP._showForgotPwd(false)" style="background:none;border:none;color:var(--mut);font-size:.78rem;cursor:pointer;">← Back to login</button>
+    </div>
+  </div>
+</div>
+
+<!-- SETTINGS -->
+<div class="overlay" id="settingsM"><div class="modal" style="max-width:560px;">
+  <h2>⚙️ Settings</h2>
+
+  <!-- Push Notifications -->
+  <div style="background:#f0f7ff;border:1px solid #90b8e8;border-radius:10px;padding:14px;margin-bottom:16px;">
+    <div style="font-weight:700;color:#1565c0;margin-bottom:8px;font-size:.9rem;">🔔 Push Notifications</div>
+    <div style="font-size:.76rem;color:var(--mut);margin-bottom:10px;line-height:1.6;">
+      Enable to get <b>daily reminder alerts</b> on your phone/laptop — even when the app tab is in background.<br>
+      Works on Chrome (Android, Windows, Mac).
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+      <button id="_pushBtn" onclick="_pushToggle()" style="padding:7px 16px;border-radius:8px;border:1.5px solid #fca5a5;background:#fee2e2;color:#991b1b;font-family:'Nunito',sans-serif;font-size:.82rem;font-weight:800;cursor:pointer;">🔕 Notifications: OFF</button>
+      <span id="_pushStatus" style="font-size:.72rem;color:var(--mut);"></span>
+    </div>
+    <div style="margin-top:8px;font-size:.7rem;color:var(--mut);">
+      📋 <b>Setup needed:</b> Upload <code style="background:#f0f0f0;padding:1px 5px;border-radius:3px;">firebase-messaging-sw.js</code> to your GitHub repo root.
+    </div>
+  </div>
+
+  <!-- Firebase Auto Sync Status -->
+  <div style="background:#f0faf5;border:1px solid #90c8a0;border-radius:10px;padding:14px;margin-bottom:16px;">
+    <div style="font-weight:700;color:#1e7a45;margin-bottom:8px;font-size:.9rem;">☁️ Firebase Real-Time Sync</div>
+    <div id="fbSyncStatusBlock" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
+      <span id="fbStatusSettings" style="font-size:.84rem;font-weight:700;color:var(--mut);">⏳ Connecting...</span>
+    </div>
+    <div style="background:#e8f5e9;border-radius:7px;padding:8px 11px;font-size:.76rem;color:#1a4828;line-height:1.7;">
+      ✅ <b>Fully Automatic:</b> Koi button dabane ki zaroorat nahi.<br>
+      📱 <b>Laptop par save karo</b> → Android par <b>turant</b> update ho jaata hai.<br>
+      📎 <b>File uploads:</b> Firebase Storage mein save hote hain (max 10MB).
+    </div>
+    <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="btn b-sm" style="background:#f0faf5;color:#1e7a45;border:1.5px solid #90c8a0;" onclick="SYNC.forceLoad()">🔄 Force Refresh</button>
+      <button class="btn b-sm b-out" onclick="SYNC.showDiagnostics()">🔍 Diagnostics</button>
+    </div>
+  </div>
+  <div style="background:#f0f7ff;border:1px solid #90b8e8;border-radius:10px;padding:14px;margin-bottom:16px;">
+    <div style="font-weight:700;color:var(--blu);margin-bottom:10px;font-size:.9rem;">🔐 Change Password</div>
+    <div class="fgrid">
+      <div class="fg"><label>Current Password</label><input id="pwd_old" type="password" placeholder="Current password"></div>
+      <div class="fg"><label>New Password</label><input id="pwd_new" type="password" placeholder="New password (min 4 chars)"></div>
+    </div>
+    <button class="btn b-sm" style="background:#1760a0;color:#fff;border:none;margin-top:8px;" onclick="APP.changePwd()">💾 Save Password</button>
+    <div id="pwdMsg" style="font-size:.78rem;margin-top:6px;display:none;"></div>
+  </div>
+
+  <!-- Quick Links Management -->
+  <div style="background:#fff8ee;border:1px solid #f0c060;border-radius:10px;padding:14px;margin-bottom:16px;">
+    <div style="font-weight:700;color:#8a6500;margin-bottom:10px;font-size:.9rem;">🔗 Manage Quick Links</div>
+    <div id="settingsLinks" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px;max-height:200px;overflow-y:auto;"></div>
+    <button class="btn b-sm b-out" onclick="APP.addQuickLink()">+ Add New Link</button>
+  </div>
+
+  <!-- Delete Records -->
+  <div style="background:#fff0f0;border:1px solid #f0a0a0;border-radius:10px;padding:14px;">
+    <div style="font-weight:700;color:var(--red);margin-bottom:4px;font-size:.9rem;">🗑 Delete Records</div>
+    <div style="font-size:.76rem;color:var(--mut);margin-bottom:12px;">⚠️ Yahan se koi bhi record delete karein — accidentally delete nahi hoga</div>
+    <div id="settingsDeleteList" style="display:flex;flex-direction:column;gap:5px;max-height:350px;overflow-y:auto;"></div>
+  </div>
+</div></div>
+
+<!-- Firebase SDK — Real-Time Auto Sync -->
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- SCRIPTS — Load order matters: config → utils → firebase → modules → init -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+
+<!-- 1. Runtime config shared by app + service worker -->
+<script src="js/config.js"></script>
+
+<!-- 2. Shared utilities (uid, fmt, date helpers, _makePDF, safeDelete) -->
+<script src="js/utils.js"></script>
+
+<!-- 3. Firebase SDK + real-time sync + S store -->
+<script src="js/firebase.js"></script>
+
+<!-- 4. File Upload Manager -->
+<script src="js/fum.js"></script>
+
+<!-- 5. Feature Modules — each module extends APP with its own methods -->
+<script src="modules/home.js"></script>
+<script src="modules/property.js"></script>
+<script src="modules/rent.js"></script>
+<script src="modules/reminders.js"></script>
+<script src="modules/finance.js"></script>
+<script src="modules/medical.js"></script>
+<script src="modules/travel.js"></script>
+<script src="modules/calendar.js"></script>
+<script src="modules/settings.js"></script>
+<script src="modules/todo.js"></script>
+<script src="modules/khata.js"></script>
+<script src="modules/notepad.js"></script>
+<script src="modules/search.js"></script>
+
+<!-- 6. Push Notifications (FCM) -->
+<script src="js/notifications.js"></script>
+
+<!-- 7. REM — Android-style Reminder Engine (date picker, time picker, repeat) -->
+<script src="js/rem-engine.js"></script>
+
+<!-- 8. Init — flush APP proxy + keyboard shortcuts + PWA (must be LAST) -->
+<script src="js/init.js"></script>
+
+</body>
+</html>
