@@ -261,7 +261,7 @@
             <option>Cash</option><option>UPI</option><option>NEFT/IMPS</option><option>Cheque</option><option>Other</option>
           </select>
         </div>
-        <div class="fg full"><label>📎 Files</label>
+        <div class="fg full"><label>📎 Files (optional)</label>
           <div id="fu_kb_entry_wrap"></div>
         </div>
       </div>
@@ -337,13 +337,13 @@
 
     <!-- City -->
     <div class="fg">
-      <label>🏙️ City</label>
+      <label>🏙️ City <span style="color:var(--mut);font-size:.65rem;">(optional)</span></label>
       <input id="prm_city" placeholder="e.g. Noida, Greater Noida">
     </div>
 
     <!-- Purchase From -->
     <div class="fg">
-      <label>🤝 Purchase From</label>
+      <label>🤝 Purchase From <span style="color:var(--mut);font-size:.65rem;">(optional)</span></label>
       <select id="prm_from" style="background:var(--bg);border:1.5px solid var(--bdr2);color:var(--txt);padding:8px 10px;border-radius:7px;font-family:'Nunito',sans-serif;font-size:.85rem;outline:none;width:100%;">
         <option value="">— Select —</option>
         <option value="Builder">🏗️ Builder</option>
@@ -370,13 +370,13 @@
 
     <!-- Area -->
     <div class="fg">
-      <label>📐 Area (sq ft)</label>
+      <label>📐 Area (sq ft) <span style="color:var(--mut);font-size:.65rem;">(optional)</span></label>
       <input id="prm_area" placeholder="0">
     </div>
 
     <!-- Notes -->
     <div class="full fg">
-      <label>📝 Notes</label>
+      <label>📝 Notes <span style="color:var(--mut);font-size:.65rem;">(optional)</span></label>
       <textarea id="prm_notes" placeholder="Additional details..."></textarea>
     </div>
     <!-- ══ BUILDER PAYMENT LEDGER SECTION ══ -->
@@ -392,7 +392,7 @@
           <div><label style="font-size:.7rem;font-weight:700;color:var(--mut);">🔖 Ref (Cheque/Txn ID)</label><input id="prm_led_ref" placeholder="Optional" style="width:100%;margin-top:2px;padding:6px 9px;border:1.5px solid var(--bdr2);border-radius:7px;font-family:Nunito,sans-serif;font-size:.83rem;background:var(--surf);color:var(--txt);outline:none;"></div>
         </div>
         <div style="margin-top:8px;"><label style="font-size:.7rem;font-weight:700;color:var(--mut);">📝 Purpose / Description</label><input id="prm_led_purpose" placeholder="e.g. Down Payment, Installment-1, Stamp Duty, Registry, Brokerage" style="width:100%;margin-top:2px;padding:6px 9px;border:1.5px solid var(--bdr2);border-radius:7px;font-family:Nunito,sans-serif;font-size:.83rem;background:var(--surf);color:var(--txt);outline:none;"></div>
-        <div style="margin-top:6px;"><label style="font-size:.7rem;font-weight:700;color:var(--mut);">🗒️ Notes</label><input id="prm_led_notes" placeholder="Additional info" style="width:100%;margin-top:2px;padding:6px 9px;border:1.5px solid var(--bdr2);border-radius:7px;font-family:Nunito,sans-serif;font-size:.83rem;background:var(--surf);color:var(--txt);outline:none;"></div>
+        <div style="margin-top:6px;"><label style="font-size:.7rem;font-weight:700;color:var(--mut);">🗒️ Notes (optional)</label><input id="prm_led_notes" placeholder="Additional info" style="width:100%;margin-top:2px;padding:6px 9px;border:1.5px solid var(--bdr2);border-radius:7px;font-family:Nunito,sans-serif;font-size:.83rem;background:var(--surf);color:var(--txt);outline:none;"></div>
         <button onclick="APP._addLedgerEntry()" style="margin-top:9px;width:100%;background:var(--acc);color:#fff;border:none;border-radius:7px;padding:7px 14px;font-family:Nunito,sans-serif;font-size:.82rem;font-weight:800;cursor:pointer;touch-action:manipulation;">➕ Add Payment Entry</button>
       </div>
       <div id="prm_ledger_list" style="max-height:220px;overflow-y:auto;"></div>
@@ -418,36 +418,32 @@
   </div>
   <div class="fgrid">
     <div class="fg"><label>Tenant Name <span class="req-star" aria-hidden="true">*</span></label><input id="tnm_name" placeholder="Full name"></div>
-    <div class="fg">
-      <label class="tenant-contact-label"><span>Mobile</span><button type="button" class="tenant-contact-add" onclick="APP.addTenantContactField('phone')" aria-label="Add mobile">+</button></label>
-      <div id="tnm_phone_fields" class="tenant-contact-fields"></div>
-    </div>
-    <div class="fg">
-      <label class="tenant-contact-label"><span>Email</span><button type="button" class="tenant-contact-add" onclick="APP.addTenantContactField('email')" aria-label="Add email">+</button></label>
-      <div id="tnm_email_fields" class="tenant-contact-fields"></div>
-    </div>
-    <div class="fg"><label>ID Proof Type</label><select id="tnm_idtype"><option value="">—</option><option>Aadhaar</option><option>PAN</option><option>Passport</option><option>Voter ID</option></select></div>
-    <div class="fg"><label>ID Proof Number</label><input id="tnm_idno" placeholder="Aadhaar / PAN number"></div>
-    <div class="full fg"><label>🏠 Home / Permanent Address</label><textarea id="tnm_addr" placeholder="Tenant ka permanent address..." style="min-height:50px;"></textarea></div>
+    <div class="fg"><label>Mobile 1 <span style="color:var(--mut);font-size:.65rem;">(optional)</span></label><input id="tnm_ph" placeholder="+91 XXXXX XXXXX"></div>
+    <div class="fg"><label>Mobile 2 <span style="color:var(--mut);font-size:.65rem;">(optional)</span></label><input id="tnm_ph2" placeholder="+91 XXXXX XXXXX"></div>
+    <div class="fg"><label>Email 1 <span style="color:var(--mut);font-size:.65rem;">(optional)</span></label><input id="tnm_email" placeholder="tenant@email.com"></div>
+    <div class="fg"><label>Email 2 <span style="color:var(--mut);font-size:.65rem;">(optional)</span></label><input id="tnm_email2" placeholder="second@email.com"></div>
+    <div class="fg"><label>ID Proof Type <span style="color:var(--mut);font-size:.65rem;">(optional)</span></label><select id="tnm_idtype"><option value="">—</option><option>Aadhaar</option><option>PAN</option><option>Passport</option><option>Voter ID</option></select></div>
+    <div class="fg"><label>ID Proof Number <span style="color:var(--mut);font-size:.65rem;">(optional)</span></label><input id="tnm_idno" placeholder="Aadhaar / PAN number"></div>
+    <div class="full fg"><label>🏠 Home / Permanent Address <span style="color:var(--mut);font-size:.65rem;">(optional)</span></label><textarea id="tnm_addr" placeholder="Tenant ka permanent address..." style="min-height:50px;"></textarea></div>
     <div class="fg"><label>Property</label><select id="tnm_prop"></select></div>
     <div class="fg"><label>Monthly Rent (₹) <span class="req-star" aria-hidden="true">*</span></label><input id="tnm_rent" type="number"></div>
-    <div class="fg"><label>Security Deposit (₹)</label><input id="tnm_sec" type="number"></div>
-    <div class="fg"><label>Advance (₹)</label><input id="tnm_adv" type="number"></div>
-    <div class="fg"><label>Maintenance (₹/mo)</label><input id="tnm_maint" type="number" placeholder="0"></div>
-    <div class="fg"><label>📅 Agreement Start (DD/MM/YYYY)</label><div id="tnm_start_wrap"></div></div>
-    <div class="fg"><label>📅 Agreement End (DD/MM/YYYY)</label><div id="tnm_end_wrap"></div></div>
-    <div class="fg"><label>Rent Due Day</label><select id="tnm_due"><option value="1">1st</option><option value="5">5th</option><option value="7">7th</option><option value="10">10th</option><option value="15">15th</option><option value="20">20th</option><option value="25">25th</option><option value="28">28th</option></select></div>
-    <div class="fg"><label>Payment Mode</label><select id="tnm_mode"><option>NEFT</option><option>RTGS</option><option>UPI</option><option>Cheque</option><option>Cash</option></select></div>
-    <div class="fg"><label>Status</label><select id="tnm_status"><option value="active">Active</option><option value="notice">Notice Period</option><option value="ended">Ended</option><option value="vacant">Vacant</option></select></div>
-    <div class="full fg"><label>📎 Agreement Document</label><div id="fu_ten_doc_wrap"></div></div>
-    <div class="fg"><label>🔁 Recurring Rent Invoice</label>
+    <div class="fg"><label>Security Deposit (₹) <span style="color:var(--mut);font-size:.65rem;">(optional)</span></label><input id="tnm_sec" type="number"></div>
+    <div class="fg"><label>Advance (₹) <span style="color:var(--mut);font-size:.65rem;">(optional)</span></label><input id="tnm_adv" type="number"></div>
+    <div class="fg"><label>Maintenance (₹/mo) <span style="color:var(--mut);font-size:.65rem;">(optional)</span></label><input id="tnm_maint" type="number" placeholder="0"></div>
+    <div class="fg"><label>📅 Agreement Start <span style="color:var(--mut);font-size:.65rem;">(optional)</span> (DD/MM/YYYY)</label><div id="tnm_start_wrap"></div></div>
+    <div class="fg"><label>📅 Agreement End <span style="color:var(--mut);font-size:.65rem;">(optional)</span> (DD/MM/YYYY)</label><div id="tnm_end_wrap"></div></div>
+    <div class="fg"><label>Rent Due Day <span style="color:var(--mut);font-size:.65rem;">(optional)</span></label><select id="tnm_due"><option value="1">1st</option><option value="5">5th</option><option value="7">7th</option><option value="10">10th</option><option value="15">15th</option><option value="20">20th</option><option value="25">25th</option><option value="28">28th</option></select></div>
+    <div class="fg"><label>Payment Mode <span style="color:var(--mut);font-size:.65rem;">(optional)</span></label><select id="tnm_mode"><option>NEFT</option><option>RTGS</option><option>UPI</option><option>Cheque</option><option>Cash</option></select></div>
+    <div class="fg"><label>Status <span style="color:var(--mut);font-size:.65rem;">(optional)</span></label><select id="tnm_status"><option value="active">Active</option><option value="notice">Notice Period</option><option value="ended">Ended</option><option value="vacant">Vacant</option></select></div>
+    <div class="full fg"><label>📎 Agreement Document <span style="color:var(--mut);font-size:.65rem;">(optional)</span></label><div id="fu_ten_doc_wrap"></div></div>
+    <div class="fg"><label>🔁 Recurring Rent Invoice <span style="color:var(--mut);font-size:.65rem;">(optional)</span></label>
       <select id="tnm_recurring" style="background:var(--bg);border:1.5px solid var(--bdr2);color:var(--txt);padding:8px 11px;border-radius:7px;font-family:'Nunito',sans-serif;font-size:.85rem;outline:none;width:100%;" onchange="document.getElementById('tnm_invdate_row').style.display=this.value==='yes'?'':'none'">
         <option value="no">No</option>
         <option value="yes">Yes — Auto generate monthly</option>
       </select>
     </div>
     <div class="fg" id="tnm_invdate_row" style="display:none"><label>📅 Invoice Generate Day (DD/MM/YYYY)</label><div id="tnm_invdate_wrap"></div></div>
-    <div class="full fg"><label>Notes / Special Conditions</label><textarea id="tnm_notes"></textarea></div>
+    <div class="full fg"><label>Notes / Special Conditions <span style="color:var(--mut);font-size:.65rem;">(optional)</span></label><textarea id="tnm_notes"></textarea></div>
   </div>
 
   <div class="modal-foot"><button class="btn b-out" type="button" onclick="M.close('tenM')">Cancel</button><button id="tnm_save_btn" class="btn b-gold" type="button" data-app-action="saveTenant">Save Tenant</button></div>
@@ -486,36 +482,57 @@
         Previous payments are <b>NOT deleted</b>. Running balance will reduce accordingly.
       </div>
 
-      <!-- Amount split — bank received + TDS deducted -->
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;margin-bottom:14px;">
-        <div style="text-align:center;">
-          <div id="pym_amt_label" style="font-size:.62rem;text-transform:uppercase;letter-spacing:.08em;color:var(--mut);font-weight:700;margin-bottom:5px;">🏦 AMOUNT RECEIVED IN BANK (₹) <span class="req-star" aria-hidden="true">*</span></div>
-          <input id="pym_amt" type="number" inputmode="decimal" placeholder="0"
-            style="width:100%;text-align:center;font-size:1.7rem;font-weight:900;font-family:'JetBrains Mono',monospace;color:var(--txt);background:var(--dim);border:2px solid var(--bdr2);border-radius:12px;padding:10px 14px;outline:none;box-sizing:border-box;transition:border-color .15s;"
-            onfocus="this.style.borderColor='var(--acc)'" onblur="this.style.borderColor='var(--bdr2)'" oninput="APP._updateTdsPreview()">
-        </div>
-        <div style="text-align:center;">
-          <div style="font-size:.62rem;text-transform:uppercase;letter-spacing:.08em;color:#7c3aed;font-weight:700;margin-bottom:5px;">🏛️ TDS DEDUCTED (₹)</div>
-          <input id="pym_tds_amt" type="number" min="0" step="0.01" placeholder="0"
-            style="width:100%;text-align:center;font-size:1.25rem;font-weight:800;font-family:'JetBrains Mono',monospace;color:#5b21b6;background:#f5f3ff;border:2px solid #c4b5fd;border-radius:12px;padding:12px 14px;outline:none;box-sizing:border-box;transition:border-color .15s;"
-            onfocus="this.style.borderColor='#8b5cf6'" onblur="this.style.borderColor='#c4b5fd'" oninput="APP._updateTdsPreview()">
-        </div>
+      <!-- Amount — prominent -->
+      <div style="text-align:center;margin-bottom:14px;">
+        <div id="pym_amt_label" style="font-size:.62rem;text-transform:uppercase;letter-spacing:.08em;color:var(--mut);font-weight:700;margin-bottom:5px;">🏦 BANK AMOUNT (₹) <span class="req-star" aria-hidden="true">*</span></div>
+        <input id="pym_amt" type="number" inputmode="decimal" placeholder="0"
+          style="width:100%;text-align:center;font-size:1.7rem;font-weight:900;font-family:'JetBrains Mono',monospace;color:var(--txt);background:var(--dim);border:2px solid var(--bdr2);border-radius:12px;padding:10px 14px;outline:none;box-sizing:border-box;transition:border-color .15s;"
+          onfocus="this.style.borderColor='var(--acc)'" onblur="this.style.borderColor='var(--bdr2)'" oninput="APP._updateTdsPreview()">
       </div>
-      <div id="pym_tds_preview" style="font-size:.72rem;color:#5b21b6;margin:-4px 0 12px;padding:7px 10px;background:#f5f3ff;border:1.5px solid #ddd6fe;border-radius:8px;display:none;"></div>
 
       <div class="fgrid">
         <div class="fg"><label>📅 Date <span class="req-star" aria-hidden="true">*</span> (DD/MM/YYYY)</label><div id="pym_date_wrap"></div></div>
-        <div class="fg"><label>🗓️ Rent For Month</label>
+        <div class="fg"><label>🗓️ Rent For Month <span style="color:var(--mut);font-size:.65rem;">(optional)</span></label>
           <select id="pym_rent_month" style="width:100%;background:var(--bg);border:1.5px solid var(--bdr2);color:var(--txt);padding:8px 10px;border-radius:7px;font-family:'Nunito',sans-serif;font-size:.84rem;outline:none;"></select>
         </div>
-        <div class="fg"><label>💳 Payment Mode</label>
+        <div class="fg"><label>💳 Payment Mode <span style="color:var(--mut);font-size:.65rem;">(optional)</span></label>
           <select id="pym_mode" style="width:100%;background:var(--bg);border:1.5px solid var(--bdr2);color:var(--txt);padding:8px 10px;border-radius:7px;font-family:'Nunito',sans-serif;font-size:.84rem;outline:none;">
             <option>NEFT</option><option>RTGS</option><option>UPI</option><option>Cheque</option><option>Cash</option><option>Bank Transfer</option><option>Other</option>
           </select>
         </div>
-        <div class="fg"><label>🔖 Ref / UTR Number</label><input id="pym_ref" placeholder="Transaction reference"></div>
-        <div class="full fg"><label>📝 Note</label><input id="pym_note" placeholder="e.g. March 2026 rent, Excess refund…"></div>
-        <div class="full fg"><label>📎 Receipt</label><div id="fu_pay_receipt_wrap"></div></div>
+        <div class="fg"><label>🔖 Ref / UTR Number <span style="color:var(--mut);font-size:.65rem;">(optional)</span></label><input id="pym_ref" placeholder="Transaction reference"></div>
+        <div class="full fg"><label>📝 Note <span style="color:var(--mut);font-size:.65rem;">(optional)</span></label><input id="pym_note" placeholder="e.g. March 2026 rent, Excess refund…"></div>
+        <div class="full fg"><label>📎 Receipt <span style="color:var(--mut);font-size:.65rem;">(optional)</span></label><div id="fu_pay_receipt_wrap"></div></div>
+
+        <!-- TDS Deduction — separate from bank payment -->
+        <div class="full pay-tds-card" style="background:#f5f3ff;border:1.5px solid #c4b5fd;border-radius:10px;padding:11px 13px;margin-top:6px;">
+          <div style="font-size:.72rem;font-weight:800;color:#5b21b6;margin-bottom:8px;display:flex;align-items:center;gap:6px;">
+            🏛️ TDS DEDUCTION
+            <span style="font-size:.62rem;color:#7c3aed;font-weight:400;">(optional — kept separate from bank payment)</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+            <div class="fg">
+              <label style="color:#5b21b6;">TDS AMOUNT (₹)</label>
+              <input id="pym_tds_amt" type="number" min="0" step="0.01" placeholder="0" style="border-color:#c4b5fd;" oninput="APP._updateTdsPreview()">
+            </div>
+            <div class="fg">
+              <label style="color:#5b21b6;">TDS DEDUCTION DATE</label>
+              <input id="pym_tds_date" type="date" style="border-color:#c4b5fd;">
+            </div>
+            <div class="fg">
+              <label style="color:#5b21b6;">TDS CHALLAN / REF NO.</label>
+              <input id="pym_tds_ref" placeholder="Challan No / UTR">
+            </div>
+            <div class="fg">
+              <label style="color:#5b21b6;">TDS STATUS</label>
+              <select id="pym_tds_status" style="border-color:#c4b5fd;">
+                <option value="pending">⏳ Pending Verification</option>
+                <option value="verified">✅ Verified</option>
+              </select>
+            </div>
+          </div>
+          <div id="pym_tds_preview" style="font-size:.72rem;color:#5b21b6;margin-top:6px;padding:5px 8px;background:#ede9fe;border-radius:6px;display:none;"></div>
+        </div>
       </div>
 
       <!-- Current balance summary -->
@@ -586,12 +603,12 @@
         </div>
       </div>
 
-      <!-- Expiry Date -->
+      <!-- Expiry Date (optional) -->
       <div style="background:#2a2f3a;border-radius:12px;overflow:hidden;margin-bottom:10px;">
         <div style="display:flex;align-items:center;gap:12px;padding:11px 14px;">
           <span style="font-size:1.1rem;width:26px;text-align:center;">📆</span>
           <div style="flex:1;min-width:0;">
-            <div style="font-size:.6rem;color:#555;text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px;">Expiry Date</div>
+            <div style="font-size:.6rem;color:#555;text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px;">Expiry Date <span style="color:#444;">(optional)</span></div>
             <input id="rem_exp_date" type="date"
               style="background:none;border:none;border-bottom:1.5px solid #3d4455;color:#ccc;font-size:.88rem;font-family:'Nunito',sans-serif;outline:none;width:100%;padding:2px 0;color-scheme:dark;">
           </div>
@@ -614,7 +631,7 @@
 
       <!-- Note input -->
       <div style="background:#2a2f3a;border-radius:10px;display:flex;align-items:center;padding:2px 12px;border:1.5px solid #3d4455;margin-bottom:6px;">
-        <input id="rem_note_inp" placeholder="Note"
+        <input id="rem_note_inp" placeholder="Note (optional)"
           style="flex:1;background:none;border:none;color:#aaa;font-size:.83rem;padding:9px 0;outline:none;font-family:'Nunito',sans-serif;">
       </div>
 
@@ -1086,7 +1103,7 @@
 
       <!-- File Attachments — compact thumbnails -->
       <div style="margin-bottom:4px;">
-        <div style="font-size:.6rem;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);font-weight:700;margin-bottom:6px;">📎 ATTACHMENTS</div>
+        <div style="font-size:.6rem;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);font-weight:700;margin-bottom:6px;">📎 ATTACHMENTS (optional)</div>
         <!-- Compact upload zone -->
         <label id="exm_file_lbl" style="display:flex;align-items:center;gap:8px;background:var(--dim);border:1.5px dashed var(--bdr2);border-radius:8px;padding:8px 12px;cursor:pointer;font-size:.78rem;color:var(--mut);">
           <span style="font-size:1rem;">📎</span>

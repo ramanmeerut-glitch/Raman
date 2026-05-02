@@ -8,7 +8,8 @@
 Object.assign(APP, {
   // ══ MEDICAL ══
   savePatient(){
-    const name=v('ptm_name');if(!name){alert('Name required!');return;}
+    return this._runGuardedAction('savePatient', (release)=>{
+    const name=v('ptm_name');if(!name){alert('Name required!');release();return;}
     const data={name,relation:v('ptm_rel'),dob:vDate('ptm_dob')||v('ptm_dob'),blood:v('ptm_blood'),cond:v('ptm_cond'),emg:v('ptm_emg'),ins:v('ptm_ins')};
     let ps=this.patients;
     if(this.editPatId){
@@ -21,6 +22,7 @@ Object.assign(APP, {
     ['ptm_name','ptm_rel','ptm_cond','ptm_emg','ptm_ins'].forEach(f=>sv(f,''));
     sv('ptm_blood','');svDate('ptm_dob','');
     this.renderMedical();
+    });
   },
   openPatientModal(id){
     this.editPatId=id||null;
@@ -116,9 +118,10 @@ Object.assign(APP, {
     M.open('medM');
   },
   saveMedRecord(){
+    return this._runGuardedAction('saveMedRecord', (release)=>{
     try {
       const pat=v('mdm_pat'),date=vDate('mdm_date')||v('mdm_date');
-      if(!pat||!date){alert('Patient aur date zaroori hai!');return;}
+      if(!pat||!date){alert('Patient aur date zaroori hai!');release();return;}
       const nextRaw=vDate('mdm_next')||v('mdm_next');
       const nextIso=nextRaw?(nextRaw.includes('-')?nextRaw:(dmyToIso&&dmyToIso(nextRaw))||nextRaw):'';
       const presFiles=FUM.getFiles('fu_med_pres_wrap')||[];
@@ -176,7 +179,9 @@ Object.assign(APP, {
     } catch(err) {
       console.error('saveMedRecord error:',err);
       alert('Save error: '+err.message);
+      release();
     }
+    });
   },
   delVisit(id){
     this.delCb=()=>{S.set('visits',this.visits.filter(r=>r.id!==id));this.renderMedical();};
@@ -1343,15 +1348,22 @@ Object.assign(APP, {
       if(medTo)   recs=recs.filter(r=>r.date&&r.date<=medTo);
     }
     const medFilterBar=filter30?'':`
-      <div style="background:var(--card2);border:1px solid var(--bdr);border-radius:10px;padding:10px 14px;margin-bottom:12px;">
-        <div style="font-size:.72rem;font-weight:800;color:var(--mut);margin-bottom:7px;">📅 Filter by Date Range</div>
-        <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;">
-          <span style="font-size:.72rem;color:var(--mut);font-weight:600;">From</span>
-          <span style="position:relative;display:inline-flex;align-items:center;"><input type="text" id="df_mdf" value="${medFrom?isoToDmy(medFrom):''}" placeholder="DD/MM/YYYY" oninput="(function(el){var iso=dmyToIso(el.value);var h=document.getElementById('dfh_mdf');if(iso){if(h)h.value=iso;el.style.borderColor='var(--acc)';APP._medFrom=iso;APP.renderMedical();}else{el.style.borderColor=el.value?'var(--red)':'var(--bdr2)';}})(this)" style="font-family:'JetBrains Mono',monospace;font-size:.72rem;padding:3px 26px 3px 7px;border:1.5px solid var(--bdr2);border-radius:6px;background:var(--bg);color:var(--txt);width:108px;outline:none;letter-spacing:.02em;"><span onclick="document.getElementById('dfh_mdf').showPicker&&document.getElementById('dfh_mdf').showPicker()" style="position:absolute;right:4px;cursor:pointer;font-size:.78rem;opacity:.65;user-select:none;">📅</span><input type="date" id="dfh_mdf" value="${medFrom||''} " onchange="(function(iso){var el=document.getElementById('df_mdf');if(el){el.value=iso?isoToDmy(iso):'';el.style.borderColor=iso?'var(--acc)':'var(--bdr2)';}  APP._medFrom=iso;APP.renderMedical();})(this.value)" style="position:absolute;opacity:0;width:1px;height:1px;pointer-events:none;"></span>
-          <span style="font-size:.72rem;color:var(--mut);font-weight:600;">To</span>
-          <span style="position:relative;display:inline-flex;align-items:center;"><input type="text" id="df_mdt" value="${medTo?isoToDmy(medTo):''}" placeholder="DD/MM/YYYY" oninput="(function(el){var iso=dmyToIso(el.value);var h=document.getElementById('dfh_mdt');if(iso){if(h)h.value=iso;el.style.borderColor='var(--acc)';APP._medTo=iso;APP.renderMedical();}else{el.style.borderColor=el.value?'var(--red)':'var(--bdr2)';}})(this)" style="font-family:'JetBrains Mono',monospace;font-size:.72rem;padding:3px 26px 3px 7px;border:1.5px solid var(--bdr2);border-radius:6px;background:var(--bg);color:var(--txt);width:108px;outline:none;letter-spacing:.02em;"><span onclick="document.getElementById('dfh_mdt').showPicker&&document.getElementById('dfh_mdt').showPicker()" style="position:absolute;right:4px;cursor:pointer;font-size:.78rem;opacity:.65;user-select:none;">📅</span><input type="date" id="dfh_mdt" value="${medTo||''} " onchange="(function(iso){var el=document.getElementById('df_mdt');if(el){el.value=iso?isoToDmy(iso):'';el.style.borderColor=iso?'var(--acc)':'var(--bdr2)';}  APP._medTo=iso;APP.renderMedical();})(this.value)" style="position:absolute;opacity:0;width:1px;height:1px;pointer-events:none;"></span>
-          ${(medFrom||medTo)?'<button onclick="APP._medFrom=\'\';APP._medTo=\'\';APP.renderMedical();" class="btn b-sm b-out" style="font-size:.65rem;padding:2px 7px;">✕ Clear</button>':''}
-          <span style="font-size:.68rem;color:var(--acc);font-weight:700;margin-left:4px;">${recs.length} record${recs.length!==1?'s':''}</span>
+      <div class="date-filter-panel">
+        <div class="date-filter-bar">
+          <div class="date-filter-bar__tools">
+            ${renderCompactDateRangeFilter({
+              label:'Date',
+              fromId:'dfh_mdf',
+              toId:'dfh_mdt',
+              fromValue:medFrom,
+              toValue:medTo,
+              fromOnChange:"APP._medFrom=this.value;APP.renderMedical()",
+              toOnChange:"APP._medTo=this.value;APP.renderMedical()",
+              clearOnClick:"APP._medFrom='';APP._medTo='';APP.renderMedical()",
+              meta:`${recs.length} record${recs.length!==1?'s':''}`,
+              className:'date-filter-inline--tight'
+            })}
+          </div>
         </div>
       </div>`;
 

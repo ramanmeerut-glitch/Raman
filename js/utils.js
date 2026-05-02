@@ -7,8 +7,97 @@
 'use strict';
 
 // ═══════════════════════════════
-const M={open(id){document.getElementById(id).classList.add('open');},close(id){document.getElementById(id).classList.remove('open');}};
-document.querySelectorAll('.overlay').forEach(o=>o.addEventListener('click',e=>{if(e.target===o&&!o.dataset.noclose)o.classList.remove('open');}));
+const M={
+  ensureChrome(target){
+    const overlay = typeof target === 'string' ? document.getElementById(target) : target;
+    if(!overlay || !overlay.classList || !overlay.classList.contains('overlay')) return;
+    if(overlay.id === 'loginM' || overlay.dataset.hideX === '1') return;
+    const modal = overlay.querySelector(':scope > .modal');
+    if(!modal) return;
+    modal.classList.add('modal-has-x');
+    let closeBtn = modal.querySelector(':scope > .modal-x');
+    if(!closeBtn){
+      closeBtn = document.createElement('button');
+      closeBtn.type = 'button';
+      closeBtn.className = 'modal-x';
+      closeBtn.setAttribute('aria-label','Close popup');
+      closeBtn.innerHTML = '<span class="material-symbols-outlined" aria-hidden="true">close</span>';
+      closeBtn.addEventListener('click', ()=>this.close(overlay.id));
+      modal.prepend(closeBtn);
+    }
+  },
+  open(id){
+    const overlay = document.getElementById(id);
+    if(!overlay) return;
+    this.ensureChrome(overlay);
+    overlay.classList.add('open');
+    try{ if(typeof stripOptionalLabelHints === 'function') stripOptionalLabelHints(overlay); }catch(e){}
+    try{ if(typeof normalizeRequiredLabels === 'function') normalizeRequiredLabels(overlay); }catch(e){}
+  },
+  close(id){
+    const overlay = document.getElementById(id);
+    if(!overlay) return;
+    overlay.classList.remove('open');
+  }
+};
+document.querySelectorAll('.overlay').forEach(o=>{
+  M.ensureChrome(o);
+  o.addEventListener('click',e=>{if(e.target===o&&!o.dataset.noclose)o.classList.remove('open');});
+});
+
+function stripOptionalLabelHints(root){
+  const scope = root && root.querySelectorAll ? root : document;
+  const labels = scope.querySelectorAll('label');
+  labels.forEach(function(label){
+    if(!label || label.dataset.optNormalized === '1') return;
+    let html = label.innerHTML || '';
+    html = html
+      .replace(/<span[^>]*>\s*\(optional[^<]*<\/span>/gi,'')
+      .replace(/\s*\(optional[^)]*\)/gi,'')
+      .replace(/\s{2,}/g,' ')
+      .trim();
+    label.innerHTML = html;
+    label.dataset.optNormalized = '1';
+  });
+}
+window.stripOptionalLabelHints = stripOptionalLabelHints;
+if(document.readyState === 'loading'){
+  document.addEventListener('DOMContentLoaded', function(){ stripOptionalLabelHints(document); });
+}else{
+  stripOptionalLabelHints(document);
+}
+
+function normalizeRequiredLabels(root){
+  const scope = root && root.querySelectorAll ? root : document;
+  const labels = scope.querySelectorAll('label, .modal label, .fg label');
+  labels.forEach(function(label){
+    if(!label || label.dataset.reqNormalized === '1') return;
+    const text = (label.textContent || '').replace(/\s+/g,' ').trim();
+    const isOptional = /\boptional\b/i.test(text);
+    const hasRequired = /\bmandatory\b/i.test(text) || /[★*]/.test(text);
+    if(!hasRequired || isOptional){
+      label.dataset.reqNormalized = '1';
+      return;
+    }
+    let html = label.innerHTML || '';
+    html = html
+      .replace(/<span[^>]*class=(["'])req-star\1[^>]*>.*?<\/span>/gi,'')
+      .replace(/\s*[★*]+\s*MANDATORY\b/gi,'')
+      .replace(/\bMANDATORY\b/gi,'')
+      .replace(/\s*[★*]+\s*/g,' ')
+      .replace(/\s{2,}/g,' ')
+      .replace(/\s+([)\]])/g,'$1')
+      .trim();
+    label.innerHTML = html + '<span class="req-star" aria-hidden="true">*</span>';
+    label.dataset.reqNormalized = '1';
+  });
+}
+window.normalizeRequiredLabels = normalizeRequiredLabels;
+if(document.readyState === 'loading'){
+  document.addEventListener('DOMContentLoaded', function(){ normalizeRequiredLabels(document); });
+}else{
+  normalizeRequiredLabels(document);
+}
 
 const S={
   get(k){try{return JSON.parse(localStorage.getItem('rk_'+k))||[];}catch{return[];}},
@@ -90,23 +179,6 @@ function daysFrom(ds){
   return Math.round((t1 - t2) / 86400000);
 }
 
-// getReminderTriggerDate: expiry - before days → ISO string (no toISOString/UTC)
-function getReminderTriggerDate(expIso, beforeDays){
-  if(!expIso) return null;
-  const d = parseIso(expIso);
-  if(!d || isNaN(d)) return null;
-  d.setDate(d.getDate() - Number(beforeDays||0));
-  // Return as YYYY-MM-DD LOCAL (not UTC)
-  return d.getFullYear() + '-' +
-         String(d.getMonth()+1).padStart(2,'0') + '-' +
-         String(d.getDate()).padStart(2,'0');
-}
-
-// daysUntilTrigger: days from today to when reminder STARTS
-function daysUntilTrigger(expIso, beforeDays){
-  return daysFrom(getReminderTriggerDate(expIso, beforeDays));
-}
-
 // daysUntilExpiry: days from today to expiry
 function daysUntilExpiry(expIso){
   return daysFrom(expIso);
@@ -129,8 +201,8 @@ function remBadge(d){
   if(d===0)return`<span class="badge br">🔔 Today</span>`;
   if(d<=7)return`<span class="badge by">📅 In ${d}d</span>`;
   if(d<=30)return`<span class="badge bg">📅 In ${d}d</span>`;
-  if(daysExp<=90)return`<span class="badge by">🟡 ${daysExp}d to expire</span>`;
-  return`<span class="badge bg">🟢 ${daysExp}d to expire</span>`;
+  if(d<=90)return`<span class="badge by">🟡 In ${d}d</span>`;
+  return`<span class="badge bg">🟢 In ${d}d</span>`;
 }
 const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
 const SM=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -232,6 +304,53 @@ function svDate(id, iso){
   if(txt)txt.value=isoToDmy(iso);
   if(hid)hid.value=iso||'';
 }
+
+function compactDateLabel(iso, fallback){
+  if(!iso) return fallback || 'Start';
+  const d = parseIso(iso);
+  if(!d || isNaN(d)) return fallback || 'Start';
+  return String(d.getDate()).padStart(2,'0') + ' ' + SM[d.getMonth()];
+}
+
+function openHiddenDateInput(id){
+  const el=document.getElementById(id);
+  if(!el) return;
+  if(typeof el.showPicker === 'function') el.showPicker();
+  else el.click();
+}
+window.openHiddenDateInput = openHiddenDateInput;
+
+function renderCompactDateRangeFilter(opts){
+  opts = opts || {};
+  const label = opts.label || 'Date';
+  const fromId = opts.fromId || uid();
+  const toId = opts.toId || uid();
+  const fromValue = opts.fromValue || '';
+  const toValue = opts.toValue || '';
+  const fromText = compactDateLabel(fromValue, opts.fromText || 'Start');
+  const toText = compactDateLabel(toValue, opts.toText || 'End');
+  const fromOnChange = opts.fromOnChange || '';
+  const toOnChange = opts.toOnChange || '';
+  const clearOnClick = opts.clearOnClick || '';
+  const className = opts.className ? ` ${opts.className}` : '';
+  const meta = opts.meta ? `<span class="date-filter-inline__meta">${opts.meta}</span>` : '';
+  const clearBtn = (fromValue || toValue) && clearOnClick
+    ? `<button type="button" class="date-filter-inline__clear" onclick="${clearOnClick}" aria-label="Clear date filter">×</button>`
+    : '';
+  return `
+    <div class="date-filter-inline${className}">
+      <span class="material-symbols-outlined date-filter-inline__icon" aria-hidden="true">calendar_month</span>
+      <span class="date-filter-inline__label">${label}</span>
+      <button type="button" class="date-filter-inline__trigger" onclick="openHiddenDateInput('${fromId}')">${fromText}</button>
+      <span class="date-filter-inline__sep">-</span>
+      <button type="button" class="date-filter-inline__trigger" onclick="openHiddenDateInput('${toId}')">${toText}</button>
+      ${clearBtn}
+      ${meta}
+      <input type="date" id="${fromId}" class="date-filter-inline__native" value="${fromValue}" onchange="${fromOnChange}">
+      <input type="date" id="${toId}" class="date-filter-inline__native" value="${toValue}" onchange="${toOnChange}">
+    </div>`;
+}
+window.renderCompactDateRangeFilter = renderCompactDateRangeFilter;
 
 
 
@@ -585,16 +704,13 @@ function _renderTodoWidget(){
   var KEY='rk_todos';
   var todos;
   try{ todos=JSON.parse(localStorage.getItem(KEY)||'[]'); }catch{ todos=[]; }
+  todos=(Array.isArray(todos)?todos:[]).map(function(x){ if(!x||typeof x!=='object') return x; var next=Object.assign({},x); delete next.priority; return next; });
   var today=new Date().toISOString().split('T')[0];
   // Preserve user-defined order (so ▲▼ buttons work correctly)
   var allPend=todos.filter(function(x){return !x.done;});
   var pend=allPend.slice(0,5);
-  var priColors={high:'background:#fee2e2;color:#991b1b',medium:'background:#fef9c3;color:#854d0e',low:'background:#dcfce7;color:#166534'};
-  var priIcons={high:'🔴',medium:'🟡',low:'🟢'};
   var btnStyle='background:none;border:none;cursor:pointer;padding:2px 5px;border-radius:4px;font-size:.8rem;line-height:1;';
   var rows=pend.map(function(x,idx){
-    var pc=priColors[x.priority]||priColors.medium;
-    var pl=priIcons[x.priority]||'🟡';
     var isOver=x.dueDate&&x.dueDate<today;
     var isToday=x.dueDate&&x.dueDate===today;
     var dueColor=isOver?'#e53935':isToday?'#e09050':'#b89000';
@@ -603,13 +719,11 @@ function _renderTodoWidget(){
     var recIcon=x.recurring&&x.recurring!=='none'?'<span style="font-size:.6rem;color:var(--acc);">🔁</span>':'';
     var canUp=idx>0;
     var canDown=idx<pend.length-1;
-    return '<div style="display:flex;align-items:center;gap:5px;padding:5px 0;border-bottom:1px solid var(--bdr);font-size:.81rem;'+(isOver?'background:#fff8f8;':'')+(x.priority==='high'?'border-left:3px solid #e05050;padding-left:5px;':'')+'">'
+    return '<div style="display:flex;align-items:center;gap:5px;padding:5px 0;border-bottom:1px solid var(--bdr);font-size:.81rem;'+(isOver?'background:#fff8f8;':'')+'">'
       // checkbox
       +'<input type="checkbox" onchange="APP.toggleTodo(\''+x.id+'\');APP.renderHome();APP.renderPills()" style="width:16px;height:16px;cursor:pointer;accent-color:#1a7a45;flex-shrink:0;">'
       // task text
       +'<span style="flex:1;word-break:break-word;min-width:0;">'+x.text+'</span>'
-      // priority badge
-      +'<span style="font-size:.58rem;'+pc+';border-radius:4px;padding:1px 4px;white-space:nowrap;flex-shrink:0;">'+pl+'</span>'
       // due + recurring
       +due+recIcon
       // move up
@@ -624,9 +738,6 @@ function _renderTodoWidget(){
   var inp='<div style="margin-top:8px;display:flex;flex-direction:column;gap:5px;">'
     +'<div style="display:flex;gap:5px;">'
     +'<input id="homeTodoInput" onkeydown="if(event.keyCode===13)_homeTodoAdd()" style="flex:1;background:var(--bg);border:1.5px solid var(--bdr2);border-radius:7px;padding:6px 10px;font-family:Nunito,sans-serif;font-size:.79rem;outline:none;" placeholder="Add task...">'
-    +'<select id="homeTodoPri" style="background:var(--bg);border:1.5px solid var(--bdr2);border-radius:7px;padding:5px 6px;font-family:Nunito,sans-serif;font-size:.75rem;cursor:pointer;">'
-    +'<option value="high">🔴 High</option><option value="medium" selected>🟡 Med</option><option value="low">🟢 Low</option>'
-    +'</select>'
     +'</div>'
     +'<button onclick="_homeTodoAdd()" style="background:#2c6fad;color:#fff;border:none;border-radius:7px;padding:6px 13px;font-family:Nunito,sans-serif;font-size:.82rem;font-weight:800;cursor:pointer;width:100%;">＋ Add Task</button>'
     +'</div>';
@@ -667,14 +778,12 @@ function _homeTodoMove(id, dir){
 }
 function _homeTodoAdd(){
   var el=document.getElementById('homeTodoInput');
-  var priEl=document.getElementById('homeTodoPri');
   if(!el||!el.value.trim()) return;
   var txt=el.value.trim();
-  var pri=priEl?priEl.value:'medium';
   // Save via APP.saveTodos so Firebase sync happens too
   if(typeof APP!=='undefined'&&APP.saveTodos&&APP.todos!==undefined){
     var arr=APP.todos;
-    arr.push({id:'t'+Date.now(),text:txt,done:false,priority:pri,dueDate:'',recurring:'none',created:new Date().toISOString()});
+    arr.push({id:'t'+Date.now(),text:txt,done:false,dueDate:'',recurring:'none',created:new Date().toISOString()});
     APP.saveTodos(arr);
     el.value='';
     APP.renderHome();APP.renderPills();
@@ -682,7 +791,7 @@ function _homeTodoAdd(){
     // Fallback if APP not ready
     var KEY='rk_todos';
     var arr2; try{ arr2=JSON.parse(localStorage.getItem(KEY)||'[]'); }catch{ arr2=[]; }
-    arr2.push({id:'t'+Date.now(),text:txt,done:false,priority:pri,dueDate:'',recurring:'none',created:new Date().toISOString()});
+    arr2.push({id:'t'+Date.now(),text:txt,done:false,dueDate:'',recurring:'none',created:new Date().toISOString()});
     localStorage.setItem(KEY,JSON.stringify(arr2));
     el.value='';
     if(typeof APP!=='undefined'){APP.renderHome();APP.renderPills();}

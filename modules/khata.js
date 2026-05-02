@@ -6,6 +6,317 @@
 'use strict';
 
 Object.assign(APP, {
+  _kbDefaultCategories(){
+    return ['personal','property','friend','vendor','loan','tenant','other'];
+  },
+  _kbCategories(){
+    const saved=S.obj('kbCategories', this._kbDefaultCategories());
+    const list=Array.isArray(saved)?saved:[];
+    return [...new Set([...this._kbDefaultCategories(), ...list.filter(Boolean)])];
+  },
+  _kbSaveCategories(list){
+    S.set('kbCategories', [...new Set((list||[]).filter(Boolean))]);
+  },
+  _kbRefresh(){
+    this.renderTab(this.curTab||'khata');
+  },
+  _kbCashTotals(){
+    const cash=Array.isArray(this.kbCash)?this.kbCash:[];
+    let totalIn=0,totalOut=0;
+    cash.forEach(function(e){
+      const amt=Number(e&&e.amount||0);
+      if(!amt) return;
+      if(e.type==='out') totalOut+=amt;
+      else totalIn+=amt;
+    });
+    return { totalIn, totalOut, balance: totalIn-totalOut };
+  },
+  _kbPartyBalance(partyId){
+    const entries=(Array.isArray(this.kbEntries)?this.kbEntries:[]).filter(e=>e&&e.partyId===partyId);
+    let lena=0, dena=0;
+    entries.forEach(function(e){
+      const amt=Number(e.amount||0);
+      if(!amt) return;
+      if(e.type==='dena') dena+=amt;
+      else lena+=amt;
+    });
+    return { lena, dena, net:lena-dena, entries };
+  },
+  _kbRenderEntryFiles(files){
+    const list=Array.isArray(files)?files.filter(f=>f&&f.url):[];
+    if(!list.length) return '';
+    return `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;">${list.map(function(f){
+      const name=(f.name||'Attachment').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      return `<a href="${f.url}" target="_blank" rel="noopener" style="font-size:.66rem;background:#eef4ff;border:1px solid #d9e4ff;color:#2563eb;padding:3px 8px;border-radius:999px;text-decoration:none;max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${name}">📎 ${name}</a>`;
+    }).join('')}</div>`;
+  },
+  _kbPartyLabel(cat){
+    const map={
+      personal:'Personal / Family',
+      property:'Property / Rent',
+      friend:'Friend',
+      vendor:'Vendor / Supplier',
+      loan:'Loan',
+      tenant:'Tenant',
+      other:'Other'
+    };
+    return map[cat]||cat||'Other';
+  },
+  _kbSanitizePhone(phone){
+    return String(phone||'').replace(/[^\d]/g,'');
+  },
+  _kbOpenWhatsApp(phone, message){
+    const clean=this._kbSanitizePhone(phone);
+    if(!clean){ this.showToastMsg('⚠️ Phone number missing'); return; }
+    const url='https://wa.me/91'+clean+'?text='+encodeURIComponent(message||'');
+    window.open(url,'_blank','noopener');
+  },
+  _kbAddCategory(){
+    const name=(prompt('New Khata category name')||'').trim();
+    if(!name) return;
+    const key=name.toLowerCase().replace(/\s+/g,'-');
+    const cats=this._kbCategories();
+    if(cats.includes(key)){ this.showToastMsg('⚠️ Category already exists'); return; }
+    cats.push(key);
+    this._kbSaveCategories(cats);
+    const sel=document.getElementById('kbp_cat');
+    if(sel){
+      sel.insertAdjacentHTML('beforeend', `<option value="${key}">${name}</option>`);
+      sel.value=key;
+    }
+    this.showToastMsg('✅ Category added');
+  },
+  kbSetEntryType(type){
+    const next=type==='dena'?'dena':'lena';
+    const hid=document.getElementById('kbe_type');
+    if(hid) hid.value=next;
+    const btnL=document.getElementById('kbe_btn_lena');
+    const btnD=document.getElementById('kbe_btn_dena');
+    if(btnL){
+      btnL.style.borderColor=next==='lena'?'#16a34a':'#bbf7d0';
+      btnL.style.background=next==='lena'?'#dcfce7':'#f0fdf4';
+      btnL.style.color='#166534';
+    }
+    if(btnD){
+      btnD.style.borderColor=next==='dena'?'#dc2626':'#fecaca';
+      btnD.style.background=next==='dena'?'#fee2e2':'#fff5f5';
+      btnD.style.color='#991b1b';
+    }
+  },
+  kbSetCashType(type){
+    const next=type==='out'?'out':'in';
+    const hid=document.getElementById('kbc_type');
+    if(hid) hid.value=next;
+    const btnIn=document.getElementById('kbc_btn_in');
+    const btnOut=document.getElementById('kbc_btn_out');
+    if(btnIn){
+      btnIn.style.borderColor=next==='in'?'#16a34a':'#bbf7d0';
+      btnIn.style.background=next==='in'?'#dcfce7':'#f0fdf4';
+      btnIn.style.color='#166534';
+    }
+    if(btnOut){
+      btnOut.style.borderColor=next==='out'?'#dc2626':'#fecaca';
+      btnOut.style.background=next==='out'?'#fee2e2':'#fff5f5';
+      btnOut.style.color='#991b1b';
+    }
+  },
+  kbOpenPartyModal(id){
+    const party=id?(this.kbParties||[]).find(p=>p.id===id):null;
+    this._kbPartyEditId=party?party.id:null;
+    const title=document.getElementById('kbPartyMT');
+    if(title) title.textContent=party?'👤 Edit Party / Contact':'👤 Add Party / Contact';
+    sv('kbp_name', party&&party.name||'');
+    sv('kbp_phone', party&&party.phone||'');
+    sv('kbp_notes', party&&party.notes||'');
+    const sel=document.getElementById('kbp_cat');
+    if(sel){
+      const cats=this._kbCategories();
+      const chosen=party&&party.cat||'personal';
+      if(chosen && !cats.includes(chosen)) cats.push(chosen);
+      sel.innerHTML=cats.map(cat=>`<option value="${cat}">${this._kbPartyLabel(cat)}</option>`).join('');
+      sel.value=chosen;
+    }
+    M.open('kbPartyM');
+  },
+  kbSaveParty(){
+    return this._runGuardedAction('kbSaveParty', (release)=>{
+      const name=v('kbp_name');
+      if(!name){ this.showToastMsg('⚠️ Name required'); release(); return; }
+      const parties=[...(this.kbParties||[])];
+      const item={
+        id:this._kbPartyEditId||uid(),
+        name,
+        phone:v('kbp_phone'),
+        cat:document.getElementById('kbp_cat')?.value||'personal',
+        notes:v('kbp_notes'),
+        updatedAt:new Date().toISOString()
+      };
+      const idx=parties.findIndex(p=>p.id===item.id);
+      if(idx>=0) parties[idx]={...parties[idx], ...item};
+      else parties.push({...item, createdAt:item.updatedAt});
+      this.kbParties=parties;
+      this._kbPartyEditId=null;
+      M.close('kbPartyM');
+      this.showToastMsg(idx>=0?'✅ Party updated':'✅ Party added');
+      this._kbRefresh();
+    });
+  },
+  kbOpenEntryModal(partyId, entryId){
+    const party=(this.kbParties||[]).find(p=>p.id===partyId);
+    if(!party){ this.showToastMsg('⚠️ Party not found'); return; }
+    const entry=entryId?(this.kbEntries||[]).find(e=>e.id===entryId):null;
+    this._kbEntryPartyId=partyId;
+    this._kbEntryEditId=entry?entry.id:null;
+    const dateWrap=document.getElementById('kbe_date_wrap');
+    if(dateWrap) dateWrap.innerHTML=makeDateInput('kbe_date', entry&&entry.date||todayISO());
+    const title=document.getElementById('kbEntryMT');
+    if(title) title.textContent=entry?'✏️ Edit Entry':'➕ Add Entry';
+    const info=document.getElementById('kbEntryPartyInfo');
+    if(info) info.textContent=party.name + (party.phone ? ' • ' + party.phone : '');
+    sv('kbe_amount', entry&&entry.amount||'');
+    svDate('kbe_date', entry&&entry.date||todayISO());
+    sv('kbe_note', entry&&entry.note||'');
+    const mode=document.getElementById('kbe_mode');
+    if(mode) mode.value=entry&&entry.mode||'Cash';
+    if(window.FUM){
+      FUM.clear('fu_kb_entry_wrap');
+      FUM.init('fu_kb_entry_wrap','khata-entry', entry&&entry.files||[]);
+    }
+    const type=entry&&entry.type||'lena';
+    this.kbSetEntryType(type);
+    M.open('kbEntryM');
+  },
+  kbSaveEntry(){
+    return this._runGuardedAction('kbSaveEntry', (release)=>{
+      const partyId=this._kbEntryPartyId;
+      if(!partyId){ this.showToastMsg('⚠️ Party missing'); release(); return; }
+      const amount=Number(v('kbe_amount'));
+      if(!(amount>0)){ this.showToastMsg('⚠️ Amount required'); release(); return; }
+      const date=vDate('kbe_date');
+      if(!date){ this.showToastMsg('⚠️ Date required'); release(); return; }
+      const entries=[...(this.kbEntries||[])];
+      const item={
+        id:this._kbEntryEditId||uid(),
+        partyId,
+        type:document.getElementById('kbe_type')?.value==='dena'?'dena':'lena',
+        amount,
+        date,
+        note:v('kbe_note'),
+        mode:document.getElementById('kbe_mode')?.value||'Cash',
+        files:(window.FUM&&FUM.getFiles)?FUM.getFiles('fu_kb_entry_wrap'):[]
+      };
+      const idx=entries.findIndex(e=>e.id===item.id);
+      if(idx>=0) entries[idx]={...entries[idx], ...item, updatedAt:new Date().toISOString()};
+      else entries.push({...item, createdAt:new Date().toISOString()});
+      this.kbEntries=entries;
+      this._kbEntryEditId=null;
+      M.close('kbEntryM');
+      if(window.FUM) FUM.clear('fu_kb_entry_wrap');
+      this.showToastMsg(idx>=0?'✅ Entry updated':'✅ Entry saved');
+      this._kbRefresh();
+    });
+  },
+  kbOpenCashModal(entryId){
+    const entry=entryId?(this.kbCash||[]).find(e=>e.id===entryId):null;
+    this._kbCashEditId=entry?entry.id:null;
+    const dateWrap=document.getElementById('kbc_date_wrap');
+    if(dateWrap) dateWrap.innerHTML=makeDateInput('kbc_date', entry&&entry.date||todayISO());
+    const title=document.getElementById('kbCashMT');
+    if(title) title.textContent=entry?'💵 Edit Cash Entry':'💵 Cash Register Entry';
+    sv('kbc_amount', entry&&entry.amount||'');
+    svDate('kbc_date', entry&&entry.date||todayISO());
+    const cat=document.getElementById('kbc_cat');
+    if(cat) cat.value=entry&&entry.cat||'General';
+    sv('kbc_note', entry&&entry.note||'');
+    this.kbSetCashType(entry&&entry.type||'in');
+    M.open('kbCashM');
+  },
+  kbSaveCash(){
+    return this._runGuardedAction('kbSaveCash', (release)=>{
+      const amount=Number(v('kbc_amount'));
+      if(!(amount>0)){ this.showToastMsg('⚠️ Amount required'); release(); return; }
+      const date=vDate('kbc_date');
+      if(!date){ this.showToastMsg('⚠️ Date required'); release(); return; }
+      const rows=[...(this.kbCash||[])];
+      const item={
+        id:this._kbCashEditId||uid(),
+        type:document.getElementById('kbc_type')?.value==='out'?'out':'in',
+        amount,
+        date,
+        cat:document.getElementById('kbc_cat')?.value||'General',
+        note:v('kbc_note')
+      };
+      const idx=rows.findIndex(e=>e.id===item.id);
+      if(idx>=0) rows[idx]={...rows[idx], ...item, updatedAt:new Date().toISOString()};
+      else rows.push({...item, createdAt:new Date().toISOString()});
+      this.kbCash=rows;
+      this._kbCashEditId=null;
+      M.close('kbCashM');
+      this.showToastMsg(idx>=0?'✅ Cash entry updated':'✅ Cash entry saved');
+      this._kbRefresh();
+    });
+  },
+  kbDeleteEntry(id){
+    const entry=(this.kbEntries||[]).find(e=>e.id===id);
+    if(!entry) return;
+    safeDelete(entry.note||'this entry', ()=>{
+      this.kbEntries=(this.kbEntries||[]).filter(e=>e.id!==id);
+      this.showToastMsg('🗑 Entry deleted');
+      this._kbRefresh();
+    });
+  },
+  kbDeleteCash(id){
+    const row=(this.kbCash||[]).find(e=>e.id===id);
+    if(!row) return;
+    safeDelete(row.note||row.cat||'this cash entry', ()=>{
+      this.kbCash=(this.kbCash||[]).filter(e=>e.id!==id);
+      this.showToastMsg('🗑 Cash entry deleted');
+      this._kbRefresh();
+    });
+  },
+  kbDeleteParty(id){
+    const party=(this.kbParties||[]).find(p=>p.id===id);
+    if(!party) return;
+    safeDelete(party.name, ()=>{
+      this.kbParties=(this.kbParties||[]).filter(p=>p.id!==id);
+      this.kbEntries=(this.kbEntries||[]).filter(e=>e.partyId!==id);
+      if(this._kbActiveParty===id) this._kbActiveParty=null;
+      this.showToastMsg('🗑 Party deleted');
+      this._kbRefresh();
+    });
+  },
+  kbSendWA(partyId){
+    const party=(this.kbParties||[]).find(p=>p.id===partyId);
+    if(!party){ this.showToastMsg('⚠️ Party not found'); return; }
+    const bal=this._kbPartyBalance(partyId);
+    const lines=[
+      `Namaste ${party.name},`,
+      '',
+      `Khata update:`,
+      `Liya Hai: ${fmt(bal.lena)}`,
+      `Diya Hai: ${fmt(bal.dena)}`,
+      `Net Balance: ${bal.net===0?'Clear':(bal.net>0?fmt(bal.net)+' aapko dena hai':fmt(Math.abs(bal.net))+' humne diya hai')}`
+    ];
+    this._kbOpenWhatsApp(party.phone, lines.join('\n'));
+  },
+  kbShareStatement(partyId){
+    const party=(this.kbParties||[]).find(p=>p.id===partyId);
+    if(!party){ this.showToastMsg('⚠️ Party not found'); return; }
+    const bal=this._kbPartyBalance(partyId);
+    const rows=[...bal.entries].sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+    const lines=[
+      `${party.name} - Khata Statement`,
+      ''
+    ];
+    rows.forEach(function(e, idx){
+      lines.push(`${idx+1}. ${fD(e.date)} | ${e.type==='dena'?'Diya':'Liya'} | ${fmt(e.amount)} | ${(e.note||'No note')}`);
+    });
+    lines.push('');
+    lines.push(`Total Liya: ${fmt(bal.lena)}`);
+    lines.push(`Total Diya: ${fmt(bal.dena)}`);
+    lines.push(`Net Balance: ${bal.net===0?'Clear':(bal.net>0?fmt(bal.net)+' pending from party':fmt(Math.abs(bal.net))+' given by us')}`);
+    this._kbOpenWhatsApp(party.phone, lines.join('\n'));
+  },
   renderKhata(){
     if(!this._kbSub) this._kbSub = 'parties';
     const sub = this._kbSub;
@@ -82,8 +393,8 @@ Object.assign(APP, {
         const catColors = {personal:'#8b5cf6',business:'#2563eb',property:'#d97706',other:'#6b7280'};
         const netColor = bal.net>0?'#166534':bal.net<0?'#991b1b':'#6c757d';
         const netBg = bal.net>0?'#dcfce7':bal.net<0?'#fee2e2':'#f1f5f9';
-        const netLabel = bal.net>0?`${activeParty.name} ne aapko ₹${fmt(bal.net)} DENA hai (Aapne Liya Hai)`:
-                         bal.net<0?`Aapne ${activeParty.name} ko ₹${fmt(Math.abs(bal.net))} DIYA HAI`:
+        const netLabel = bal.net>0?`${activeParty.name} ne aapko ${fmt(bal.net)} DENA hai (Aapne Liya Hai)`:
+                         bal.net<0?`Aapne ${activeParty.name} ko ${fmt(Math.abs(bal.net))} DIYA HAI`:
                          'Barabar — Koi baaki nahi';
 
         const entryRows = entries.map(e=>{
@@ -100,7 +411,7 @@ Object.assign(APP, {
             </div>
             <div style="text-align:right;flex-shrink:0;">
               <div class="${isLena?'kb-lena':'kb-dena'}" style="font-size:.9rem;font-family:'JetBrains Mono',monospace;">
-                ${isLena?'+':'-'}₹${fmt(e.amount)}
+                ${isLena?'+':'-'}${fmt(e.amount)}
               </div>
               <span class="kb-tag ${isLena?'kb-tag-lena':'kb-tag-dena'}">${isLena?'🤲 Liya Hai':'💸 Diya Hai'}</span>
             </div>
@@ -134,10 +445,11 @@ Object.assign(APP, {
           </div>
 
           <!-- Download buttons — individual party -->
-          <div style="display:flex;gap:7px;margin-bottom:12px;flex-wrap:wrap;">
-            <button onclick="APP._kbDownloadPDF(APP._kbActiveParty)" class="btn b-out b-sm" style="flex:1;border-color:#e53935;color:#e53935;">📄 PDF</button>${APP._pdfOriHtml()}
-            <button onclick="APP._kbDownloadWord(APP._kbActiveParty)" class="btn b-out b-sm" style="flex:1;border-color:#1565c0;color:#1565c0;">📝 Word</button>
-            <button onclick="APP._kbDownloadCSV(APP._kbActiveParty)" class="btn b-out b-sm" style="flex:1;border-color:#2e7d32;color:#2e7d32;">📊 CSV</button>
+          <div class="export-toolbar export-toolbar-sm">
+            ${APP._pdfOriHtml()}
+            <button onclick="APP._kbDownloadPDF(APP._kbActiveParty)" class="btn b-out b-sm export-tool-btn export-tool-pdf"><span class="material-symbols-outlined">picture_as_pdf</span><span>PDF</span></button>
+            <button onclick="APP._kbDownloadWord(APP._kbActiveParty)" class="btn b-out b-sm export-tool-btn export-tool-word"><span class="material-symbols-outlined">description</span><span>Word</span></button>
+            <button onclick="APP._kbDownloadCSV(APP._kbActiveParty)" class="btn b-out b-sm export-tool-btn export-tool-csv"><span class="material-symbols-outlined">table_view</span><span>CSV</span></button>
           </div>
 
           <!-- Entries list -->
@@ -145,11 +457,18 @@ Object.assign(APP, {
             <div style="background:var(--card2);padding:9px 14px;border-bottom:1px solid var(--bdr);">
               <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:7px;">
                 <div style="font-size:.8rem;font-weight:800;">📋 All Entries <span style="background:var(--acc);color:#fff;padding:1px 8px;border-radius:10px;font-size:.65rem;">${entries.length}</span>${allEntries.length!==entries.length?`<span style="font-size:.65rem;color:var(--mut);margin-left:4px;">(filtered from ${allEntries.length})</span>`:''}</div>
-                <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;">
-                  <span style="position:relative;display:inline-flex;align-items:center;"><input type="text" id="df_kbpf" value="${kbFrom?isoToDmy(kbFrom):''}" placeholder="DD/MM/YYYY" oninput="(function(el){var iso=dmyToIso(el.value);var h=document.getElementById('dfh_kbpf');if(iso){if(h)h.value=iso;el.style.borderColor='var(--acc)';APP._kbFromDate=iso;APP.renderKhata();}else{el.style.borderColor=el.value?'var(--red)':'var(--bdr2)';}})(this)" style="font-family:'JetBrains Mono',monospace;font-size:.72rem;padding:3px 26px 3px 7px;border:1.5px solid var(--bdr2);border-radius:6px;background:var(--bg);color:var(--txt);width:108px;outline:none;letter-spacing:.02em;"><span onclick="document.getElementById('dfh_kbpf').showPicker&&document.getElementById('dfh_kbpf').showPicker()" style="position:absolute;right:4px;cursor:pointer;font-size:.78rem;opacity:.65;user-select:none;">📅</span><input type="date" id="dfh_kbpf" value="${kbFrom||''} " onchange="(function(iso){var el=document.getElementById('df_kbpf');if(el){el.value=iso?isoToDmy(iso):'';el.style.borderColor=iso?'var(--acc)':'var(--bdr2)';}  APP._kbFromDate=iso;APP.renderKhata();})(this.value)" style="position:absolute;opacity:0;width:1px;height:1px;pointer-events:none;"></span>
-                  <span style="font-size:.72rem;color:var(--mut)">to</span>
-                  <span style="position:relative;display:inline-flex;align-items:center;"><input type="text" id="df_kbpt" value="${kbTo?isoToDmy(kbTo):''}" placeholder="DD/MM/YYYY" oninput="(function(el){var iso=dmyToIso(el.value);var h=document.getElementById('dfh_kbpt');if(iso){if(h)h.value=iso;el.style.borderColor='var(--acc)';APP._kbToDate=iso;APP.renderKhata();}else{el.style.borderColor=el.value?'var(--red)':'var(--bdr2)';}})(this)" style="font-family:'JetBrains Mono',monospace;font-size:.72rem;padding:3px 26px 3px 7px;border:1.5px solid var(--bdr2);border-radius:6px;background:var(--bg);color:var(--txt);width:108px;outline:none;letter-spacing:.02em;"><span onclick="document.getElementById('dfh_kbpt').showPicker&&document.getElementById('dfh_kbpt').showPicker()" style="position:absolute;right:4px;cursor:pointer;font-size:.78rem;opacity:.65;user-select:none;">📅</span><input type="date" id="dfh_kbpt" value="${kbTo||''} " onchange="(function(iso){var el=document.getElementById('df_kbpt');if(el){el.value=iso?isoToDmy(iso):'';el.style.borderColor=iso?'var(--acc)':'var(--bdr2)';}  APP._kbToDate=iso;APP.renderKhata();})(this.value)" style="position:absolute;opacity:0;width:1px;height:1px;pointer-events:none;"></span>
-                  ${kbFrom||kbTo?`<button onclick="APP._kbFromDate='';APP._kbToDate='';APP.renderKhata();" class="btn b-sm b-out" style="font-size:.65rem;padding:2px 6px;">✕ Clear</button>`:''}
+                <div class="date-filter-bar__tools">
+                  ${renderCompactDateRangeFilter({
+                    label:'Date',
+                    fromId:'dfh_kbpf',
+                    toId:'dfh_kbpt',
+                    fromValue:kbFrom,
+                    toValue:kbTo,
+                    fromOnChange:"APP._kbFromDate=this.value;APP.renderKhata()",
+                    toOnChange:"APP._kbToDate=this.value;APP.renderKhata()",
+                    clearOnClick:"APP._kbFromDate='';APP._kbToDate='';APP.renderKhata()",
+                    className:'date-filter-inline--tight'
+                  })}
                 </div>
               </div>
               <!-- Search bar -->
@@ -164,11 +483,11 @@ Object.assign(APP, {
               <!-- Balance Card — shown below search row -->
               <div style="background:${netBg};border:2px solid ${netColor}30;border-radius:13px;padding:14px 16px;margin-top:9px;text-align:center;">
                 <div style="font-size:.65rem;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:${netColor};margin-bottom:6px;">NET BALANCE</div>
-                <div style="font-size:1.6rem;font-weight:900;color:${netColor};font-family:'JetBrains Mono',monospace;">₹${fmt(Math.abs(bal.net))}</div>
+                <div style="font-size:1.6rem;font-weight:900;color:${netColor};font-family:'JetBrains Mono',monospace;">${fmt(Math.abs(bal.net))}</div>
                 <div style="font-size:.78rem;font-weight:700;color:${netColor};margin-top:4px;">${netLabel}</div>
                 <div style="display:flex;justify-content:center;gap:20px;margin-top:10px;font-size:.72rem;">
-                  <span style="color:#166534;">🤲 Liya Hai: <b>₹${fmt(bal.lena)}</b></span>
-                  <span style="color:#991b1b;">💸 Diya Hai: <b>₹${fmt(bal.dena)}</b></span>
+                  <span style="color:#166534;">🤲 Liya Hai: <b>${fmt(bal.lena)}</b></span>
+                  <span style="color:#991b1b;">💸 Diya Hai: <b>${fmt(bal.dena)}</b></span>
                 </div>
               </div>
             </div>
@@ -216,28 +535,30 @@ Object.assign(APP, {
 
         content = `
           <!-- All Parties: date filter (mirrors individual party view) -->
-          <div style="background:var(--card2);border:1px solid var(--bdr);border-radius:10px;padding:10px 14px;margin-bottom:10px;">
-            <div style="font-size:.72rem;font-weight:800;color:var(--mut);margin-bottom:7px;">📅 Filter by Date Range</div>
-            <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap;">
-              <div style="display:flex;align-items:center;gap:5px;">
-                <span style="font-size:.7rem;color:var(--mut);font-weight:700;">From</span>
-<span style="position:relative;display:inline-flex;align-items:center;"><input type="text" id="df_kbaf" value="${kbFrom?isoToDmy(kbFrom):''}" placeholder="DD/MM/YYYY" oninput="(function(el){var iso=dmyToIso(el.value);var h=document.getElementById('dfh_kbaf');if(iso){if(h)h.value=iso;el.style.borderColor='var(--acc)';APP._kbFromDate=iso;APP.renderKhata();}else{el.style.borderColor=el.value?'var(--red)':'var(--bdr2)';}})(this)" style="font-family:'JetBrains Mono',monospace;font-size:.72rem;padding:3px 26px 3px 7px;border:1.5px solid var(--bdr2);border-radius:6px;background:var(--bg);color:var(--txt);width:108px;outline:none;letter-spacing:.02em;"><span onclick="document.getElementById('dfh_kbaf').showPicker&&document.getElementById('dfh_kbaf').showPicker()" style="position:absolute;right:4px;cursor:pointer;font-size:.78rem;opacity:.65;user-select:none;">📅</span><input type="date" id="dfh_kbaf" value="${kbFrom||''} " onchange="(function(iso){var el=document.getElementById('df_kbaf');if(el){el.value=iso?isoToDmy(iso):'';el.style.borderColor=iso?'var(--acc)':'var(--bdr2)';}  APP._kbFromDate=iso;APP.renderKhata();})(this.value)" style="position:absolute;opacity:0;width:1px;height:1px;pointer-events:none;"></span>
+          <div class="date-filter-panel">
+            <div class="date-filter-bar">
+              <div class="date-filter-bar__tools">
+                ${renderCompactDateRangeFilter({
+                  label:'Date',
+                  fromId:'dfh_kbaf',
+                  toId:'dfh_kbat',
+                  fromValue:kbFrom,
+                  toValue:kbTo,
+                  fromOnChange:"APP._kbFromDate=this.value;APP.renderKhata()",
+                  toOnChange:"APP._kbToDate=this.value;APP.renderKhata()",
+                  clearOnClick:"APP._kbFromDate='';APP._kbToDate='';APP.renderKhata()",
+                  className:'date-filter-inline--tight'
+                })}
               </div>
-              <div style="display:flex;align-items:center;gap:5px;">
-                <span style="font-size:.7rem;color:var(--mut);font-weight:700;">To</span>
-                <span style="position:relative;display:inline-flex;align-items:center;"><input type="text" id="df_kbat" value="${kbTo?isoToDmy(kbTo):''}" placeholder="DD/MM/YYYY" oninput="(function(el){var iso=dmyToIso(el.value);var h=document.getElementById('dfh_kbat');if(iso){if(h)h.value=iso;el.style.borderColor='var(--acc)';APP._kbToDate=iso;APP.renderKhata();}else{el.style.borderColor=el.value?'var(--red)':'var(--bdr2)';}})(this)" style="font-family:'JetBrains Mono',monospace;font-size:.72rem;padding:3px 26px 3px 7px;border:1.5px solid var(--bdr2);border-radius:6px;background:var(--bg);color:var(--txt);width:108px;outline:none;letter-spacing:.02em;"><span onclick="document.getElementById('dfh_kbat').showPicker&&document.getElementById('dfh_kbat').showPicker()" style="position:absolute;right:4px;cursor:pointer;font-size:.78rem;opacity:.65;user-select:none;">📅</span><input type="date" id="dfh_kbat" value="${kbTo||''} " onchange="(function(iso){var el=document.getElementById('df_kbat');if(el){el.value=iso?isoToDmy(iso):'';el.style.borderColor=iso?'var(--acc)':'var(--bdr2)';}  APP._kbToDate=iso;APP.renderKhata();})(this.value)" style="position:absolute;opacity:0;width:1px;height:1px;pointer-events:none;"></span>
-              </div>
-              ${kbFrom||kbTo?`<button onclick="APP._kbFromDate='';APP._kbToDate='';APP.renderKhata();"
-                class="btn b-sm b-out" style="font-size:.68rem;padding:4px 10px;border-color:#e53935;color:#e53935;">✕ Clear Filter</button>`:''}
-              ${kbFrom||kbTo?`<span style="font-size:.66rem;color:var(--acc);font-weight:700;padding:3px 8px;background:#e8f5e9;border-radius:10px;">
-                📊 Filtered entries shown below</span>`:''}
+              ${kbFrom||kbTo?`<span class="date-filter-bar__meta">Filtered entries shown below</span>`:''}
             </div>
           </div>
           <!-- All parties download buttons -->
-          <div style="display:flex;gap:7px;margin-bottom:12px;flex-wrap:wrap;">
-            <button onclick="APP._kbDownloadPDF('all')" class="btn b-out b-sm" style="flex:1;border-color:#e53935;color:#e53935;">📄 All Parties PDF</button>${APP._pdfOriHtml()}
-            <button onclick="APP._kbDownloadWord('all')" class="btn b-out b-sm" style="flex:1;border-color:#1565c0;color:#1565c0;">📝 Word</button>
-            <button onclick="APP._kbDownloadCSV('all')" class="btn b-out b-sm" style="flex:1;border-color:#2e7d32;color:#2e7d32;">📊 CSV</button>
+          <div class="export-toolbar export-toolbar-sm">
+            ${APP._pdfOriHtml()}
+            <button onclick="APP._kbDownloadPDF('all')" class="btn b-out b-sm export-tool-btn export-tool-pdf"><span class="material-symbols-outlined">picture_as_pdf</span><span>PDF</span></button>
+            <button onclick="APP._kbDownloadWord('all')" class="btn b-out b-sm export-tool-btn export-tool-word"><span class="material-symbols-outlined">description</span><span>Word</span></button>
+            <button onclick="APP._kbDownloadCSV('all')" class="btn b-out b-sm export-tool-btn export-tool-csv"><span class="material-symbols-outlined">table_view</span><span>CSV</span></button>
           </div>
           <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;">${partyCards||'<div class="empty" style="padding:32px;grid-column:1/-1"><div class="ei">👥</div>No parties yet. Click + Add Party!</div>'}</div>
           ${cleared.length&&parties.length>3?`<div style="text-align:center;font-size:.72rem;color:var(--mut);margin-top:8px;">✅ ${cleared.length} parties cleared</div>`:''}`;
@@ -258,7 +579,7 @@ Object.assign(APP, {
             <div style="font-size:.68rem;color:var(--mut);">${fD(e.date)} · ${e.cat||'General'}</div>
           </div>
           <div style="text-align:right;flex-shrink:0;">
-            <div class="${isIn?'kb-lena':'kb-dena'}" style="font-size:.9rem;font-family:'JetBrains Mono',monospace;">${isIn?'+':'-'}₹${fmt(e.amount)}</div>
+            <div class="${isIn?'kb-lena':'kb-dena'}" style="font-size:.9rem;font-family:'JetBrains Mono',monospace;">${isIn?'+':'-'}${fmt(e.amount)}</div>
           </div>
           <div style="display:flex;gap:4px;margin-left:8px;">
             <button class="kb-cash-edit" data-eid="${e.id}" style="background:var(--dim);border:none;border-radius:5px;padding:3px 7px;cursor:pointer;font-size:.72rem;">✏️</button>
@@ -271,16 +592,16 @@ Object.assign(APP, {
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;">
           <div style="background:linear-gradient(135deg,#f0fdf4,#dcfce7);border:1.5px solid #86efac;border-radius:11px;padding:12px 14px;text-align:center;">
             <div style="font-size:.6rem;font-weight:900;text-transform:uppercase;letter-spacing:.06em;color:#166534;">⬇️ LIYA HAI (Cash In)</div>
-            <div style="font-size:1.2rem;font-weight:900;color:#166534;font-family:'JetBrains Mono',monospace;margin-top:4px;">₹${fmt(cashTotals.totalIn)}</div>
+            <div style="font-size:1.2rem;font-weight:900;color:#166534;font-family:'JetBrains Mono',monospace;margin-top:4px;">${fmt(cashTotals.totalIn)}</div>
           </div>
           <div style="background:linear-gradient(135deg,#fef2f2,#fee2e2);border:1.5px solid #fca5a5;border-radius:11px;padding:12px 14px;text-align:center;">
             <div style="font-size:.6rem;font-weight:900;text-transform:uppercase;letter-spacing:.06em;color:#991b1b;">⬆️ DIYA HAI (Cash Out)</div>
-            <div style="font-size:1.2rem;font-weight:900;color:#c0392b;font-family:'JetBrains Mono',monospace;margin-top:4px;">₹${fmt(cashTotals.totalOut)}</div>
+            <div style="font-size:1.2rem;font-weight:900;color:#c0392b;font-family:'JetBrains Mono',monospace;margin-top:4px;">${fmt(cashTotals.totalOut)}</div>
           </div>
         </div>
         <div style="background:${cashTotals.balance>=0?'linear-gradient(135deg,#f0f7ff,#dbeafe)':'linear-gradient(135deg,#fff5f5,#fee2e2)'};border:2px solid ${cashTotals.balance>=0?'#93c5fd':'#fca5a5'};border-radius:12px;padding:12px 16px;text-align:center;margin-bottom:14px;">
           <div style="font-size:.6rem;font-weight:900;text-transform:uppercase;letter-spacing:.08em;color:${cashTotals.balance>=0?'#1e40af':'#991b1b'};">CASH BALANCE</div>
-          <div style="font-size:1.8rem;font-weight:900;color:${cashTotals.balance>=0?'#1e40af':'#991b1b'};font-family:'JetBrains Mono',monospace;margin-top:6px;">₹${fmt(cashTotals.balance)}</div>
+          <div style="font-size:1.8rem;font-weight:900;color:${cashTotals.balance>=0?'#1e40af':'#991b1b'};font-family:'JetBrains Mono',monospace;margin-top:6px;">${fmt(cashTotals.balance)}</div>
         </div>
         <div style="background:var(--card);border:1px solid var(--bdr);border-radius:12px;overflow:hidden;box-shadow:var(--sh);">
           <div style="background:var(--card2);padding:9px 14px;border-bottom:1px solid var(--bdr);">
@@ -304,8 +625,8 @@ Object.assign(APP, {
         return `<tr>
           <td style="font-weight:700;">${catIcon[p.cat]||'📌'} ${p.name}</td>
           <td style="color:var(--mut);font-size:.75rem;">${p.phone||'—'}</td>
-          <td style="color:#166534;font-family:'JetBrains Mono',monospace;text-align:right;">₹${fmt(bal.lena)}</td>
-          <td style="color:#991b1b;font-family:'JetBrains Mono',monospace;text-align:right;">₹${fmt(bal.dena)}</td>
+          <td style="color:#166534;font-family:'JetBrains Mono',monospace;text-align:right;">${fmt(bal.lena)}</td>
+          <td style="color:#991b1b;font-family:'JetBrains Mono',monospace;text-align:right;">${fmt(bal.dena)}</td>
           <td style="color:${netColor};font-weight:800;font-family:'JetBrains Mono',monospace;text-align:right;">
             ${bal.net===0?'✓':bal.net>0?'+'+fmt(bal.net):'-'+fmt(Math.abs(bal.net))}
           </td>
@@ -323,15 +644,15 @@ Object.assign(APP, {
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
           <div style="background:var(--card);border:1px solid var(--bdr);border-radius:10px;padding:12px 14px;">
             <div style="font-size:.7rem;font-weight:800;text-transform:uppercase;color:var(--mut);margin-bottom:8px;">💵 Cash Summary</div>
-            <div class="fr"><span class="fl">Total In</span><span class="mono kb-lena">₹${fmt(cashTotals.totalIn)}</span></div>
-            <div class="fr"><span class="fl">Total Out</span><span class="mono kb-dena">₹${fmt(cashTotals.totalOut)}</span></div>
-            <div class="fr"><span class="fl">Balance</span><span class="mono" style="color:${cashTotals.balance>=0?'var(--grn)':'var(--red)'};">₹${fmt(cashTotals.balance)}</span></div>
+            <div class="fr"><span class="fl">Total In</span><span class="mono kb-lena">${fmt(cashTotals.totalIn)}</span></div>
+            <div class="fr"><span class="fl">Total Out</span><span class="mono kb-dena">${fmt(cashTotals.totalOut)}</span></div>
+            <div class="fr"><span class="fl">Balance</span><span class="mono" style="color:${cashTotals.balance>=0?'var(--grn)':'var(--red)'};">${fmt(cashTotals.balance)}</span></div>
           </div>
           <div style="background:var(--card);border:1px solid var(--bdr);border-radius:10px;padding:12px 14px;">
             <div style="font-size:.7rem;font-weight:800;text-transform:uppercase;color:var(--mut);margin-bottom:8px;">👥 Party Summary</div>
             <div class="fr"><span class="fl">Total Parties</span><span class="fv">${parties.length}</span></div>
-            <div class="fr"><span class="fl">Liya Hai (Aapne Liya)</span><span class="mono kb-lena">₹${fmt(totalLena)}</span></div>
-            <div class="fr"><span class="fl">Diya Hai (Aapne Diya)</span><span class="mono kb-dena">₹${fmt(totalDena)}</span></div>
+            <div class="fr"><span class="fl">Liya Hai (Aapne Liya)</span><span class="mono kb-lena">${fmt(totalLena)}</span></div>
+            <div class="fr"><span class="fl">Diya Hai (Aapne Diya)</span><span class="mono kb-dena">${fmt(totalDena)}</span></div>
           </div>
         </div>`;
     }

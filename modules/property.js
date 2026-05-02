@@ -1,4 +1,4 @@
-/* modules/property.js — Property Management — openPropModal, renderProperty, valuation, maintenance, EMI, ROI
+/* modules/property.js — Property Management — properties, maintenance, payment ledger, reporting
  * Extends the APP object defined in modules/home.js.
  * Load order: after home.js, before rem-engine.js and notifications.js.
  */
@@ -7,6 +7,7 @@
 
 Object.assign(APP, {
   openPropModal(id){
+    this._migratePropertyAnalysisData();
     // Use DEDICATED prop state vars — never share with this.editId (used by tenant/other modals)
     this._propEditId  = id || null;
     this._propDraftId = null;
@@ -17,7 +18,7 @@ Object.assign(APP, {
       const draft = {
         id:this._propDraftId, _draft:true,
         name:'', city:'', type:'', purchaseFrom:'', cost:'0',
-        date:'', area:'', mkt:'', loan:'', notes:'',
+        date:'', area:'', notes:'',
         propFiles:[], ledger:[]
       };
       const ps = this.props; ps.push(draft); S.set('props', ps);
@@ -39,7 +40,7 @@ Object.assign(APP, {
     const p = this.props.find(x=>x.id===workingId);
 
     if(id && p){
-      ['name','city','area','mkt','loan','notes'].forEach(f=>{try{sv('prm_'+f,p[f]||'');}catch(e){}});
+      ['name','city','area','notes'].forEach(f=>{try{sv('prm_'+f,p[f]||'');}catch(e){}});
       const typeEl=document.getElementById('prm_type'); if(typeEl) typeEl.value=p.type||'';
       const fromEl=document.getElementById('prm_from'); if(fromEl) fromEl.value=p.purchaseFrom||'';
       if(p.date) svDate('prm_date',p.date);
@@ -48,7 +49,7 @@ Object.assign(APP, {
       const costEl=document.getElementById('prm_cost');
       if(costEl) costEl.value = ledgerTotal>0 ? ledgerTotal : (p.cost||'');
     } else {
-      ['name','city','area','mkt','loan','notes'].forEach(f=>{try{sv('prm_'+f,'');}catch(e){}});
+      ['name','city','area','notes'].forEach(f=>{try{sv('prm_'+f,'');}catch(e){}});
       const typeEl=document.getElementById('prm_type'); if(typeEl) typeEl.value='';
       const fromEl=document.getElementById('prm_from'); if(fromEl) fromEl.value='';
       const costEl=document.getElementById('prm_cost'); if(costEl) costEl.value='';
@@ -60,8 +61,6 @@ Object.assign(APP, {
     });
     const modeEl=document.getElementById('prm_led_mode'); if(modeEl) modeEl.value='Cheque';
     const paidEl=document.getElementById('prm_led_paidto'); if(paidEl) paidEl.value='Builder';
-    const srcEl=document.getElementById('prm_led_source'); if(srcEl) srcEl.value='Own';
-
     this._renderLedgerList();
 
     if(window.FUM){
@@ -72,6 +71,7 @@ Object.assign(APP, {
     M.open('propM');
   },
     saveProp(){
+    return this._runGuardedAction('saveProp', (release)=>{
     const name = v('prm_name');
     const type = v('prm_type');
 
@@ -82,7 +82,7 @@ Object.assign(APP, {
     else { if(nameErr)nameErr.style.display='none'; if(nameEl)nameEl.style.borderColor='var(--bdr2)'; }
     if(!type){ if(typeErr)typeErr.style.display='block'; if(typeEl)typeEl.style.borderColor='#e53935'; hasErr=true; }
     else { if(typeErr)typeErr.style.display='none'; if(typeEl)typeEl.style.borderColor='var(--bdr2)'; }
-    if(hasErr){ this.showToastMsg('⚠️ Required fields fill karein!'); return; }
+    if(hasErr){ this.showToastMsg('⚠️ Required fields fill karein!'); release(); return; }
 
     // Use DEDICATED prop state (not shared this.editId)
     const workingId = this._propEditId || this._propDraftId;
@@ -104,8 +104,6 @@ Object.assign(APP, {
       cost:         _computedCost,
       date:         vDate('prm_date')||'',
       area:         v('prm_area')||'',
-      mkt:          v('prm_mkt')||'',
-      loan:         v('prm_loan')||'',
       notes:        v('prm_notes')||'',
       propFiles:    _finalPropFiles,
       ledger:       _ledger,
@@ -127,6 +125,7 @@ Object.assign(APP, {
     this.renderProperty();
     this.renderPills();
     this.showToastMsg(isEdit ? '✅ Property updated!' : '✅ Property added!');
+    });
   },
 
   // ══════════════════════════════════════════════════════
@@ -170,7 +169,6 @@ Object.assign(APP, {
       purpose: purpose,
       mode: gv('prm_led_mode') || 'Cheque',
       reference: gv('prm_led_ref'),
-      source: gv('prm_led_source') || 'Own',
       notes: gv('prm_led_notes')
     };
 
@@ -225,14 +223,13 @@ Object.assign(APP, {
 
     list.innerHTML = entries.map((e,i) => {
       const bg = i%2===0 ? 'var(--surf)' : 'var(--bg)';
-      const srcClr = e.source==='Loan' ? '#c0392b' : '#1a7a45';
       const dateStr = e.date ? fD(e.date) : '—';
       const refStr = e.reference ? ' · '+e.reference : '';
       const notesStr = e.notes ? '<br><span style="color:var(--mut);">'+e.notes+'</span>' : '';
       return '<div style="display:flex;align-items:flex-start;gap:8px;padding:7px 9px;background:'+bg+';border-radius:7px;margin-bottom:4px;border:1px solid var(--bdr);">'
         +'<div style="flex:1;min-width:0;">'
         +'<div style="font-size:.78rem;font-weight:800;color:var(--txt);">'+e.purpose+'</div>'
-        +'<div style="font-size:.68rem;color:var(--mut);margin-top:1px;">'+dateStr+' · '+e.paidTo+' · '+e.mode+refStr+' · <span style="color:'+srcClr+';font-weight:700;">'+e.source+'</span>'+notesStr+'</div>'
+        +'<div style="font-size:.68rem;color:var(--mut);margin-top:1px;">'+dateStr+' · '+e.paidTo+' · '+e.mode+refStr+notesStr+'</div>'
         +'</div>'
         +'<div style="text-align:right;flex-shrink:0;">'
         +'<div style="font-size:.82rem;font-weight:900;color:var(--acc);font-family:JetBrains Mono,monospace;">'+fmt2(e.amount)+'</div>'
@@ -269,7 +266,7 @@ Object.assign(APP, {
     _getPropLedger(p){
     // Returns ledger array; backward compat: if no ledger but cost exists, synthesise one entry
     if(p.ledger && Array.isArray(p.ledger) && p.ledger.length) return p.ledger;
-    if(p.cost && Number(p.cost)>0) return [{id:'legacy',date:p.date||'',amount:Number(p.cost)||0,paidTo:'Builder',purpose:'Purchase Cost',mode:'—',reference:'',source:'Own',notes:'Migrated from old record'}];
+    if(p.cost && Number(p.cost)>0) return [{id:'legacy',date:p.date||'',amount:Number(p.cost)||0,paidTo:'Builder',purpose:'Purchase Cost',mode:'—',reference:'',notes:'Migrated from old record'}];
     return [];
   },
 
@@ -280,9 +277,6 @@ Object.assign(APP, {
     const entries=this._getPropLedger(p);
     const fmt2=window.fmt||(n=>Number(n).toLocaleString('en-IN'));
     const total=entries.reduce((s,e)=>s+Number(e.amount||0),0);
-    const ownTotal=entries.filter(e=>e.source==='Own').reduce((s,e)=>s+Number(e.amount||0),0);
-    const loanTotal=entries.filter(e=>e.source==='Loan').reduce((s,e)=>s+Number(e.amount||0),0);
-
     const rows=entries.map((e,i)=>`
       <tr style="background:${i%2===0?'#fff':'#f8f9fa'};">
         <td style="padding:6px 8px;font-size:.75rem;color:#555;">${e.date?fD(e.date):'—'}</td>
@@ -290,15 +284,12 @@ Object.assign(APP, {
         <td style="padding:6px 8px;font-size:.75rem;">${e.paidTo}</td>
         <td style="padding:6px 8px;font-size:.75rem;font-family:monospace;font-weight:800;color:#1a7a45;">₹${fmt2(e.amount)}</td>
         <td style="padding:6px 8px;font-size:.72rem;">${e.mode}</td>
-        <td style="padding:6px 8px;font-size:.72rem;color:${e.source==='Loan'?'#c0392b':'#1a7a45'};font-weight:700;">${e.source}</td>
         <td style="padding:6px 8px;font-size:.68rem;color:#666;">${e.reference||'—'}</td>
         <td style="padding:6px 8px;font-size:.68rem;color:#888;">${e.notes||'—'}</td>
       </tr>`).join('');
 
     const html=`<div style="font-size:.75rem;display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
       <div style="background:#f0faf5;border:1.5px solid #90c8a0;border-radius:8px;padding:8px 14px;text-align:center;"><div style="font-size:.62rem;font-weight:800;color:#1a7a45;text-transform:uppercase;">Total Invested</div><div style="font-size:1rem;font-weight:900;color:#1a7a45;font-family:JetBrains Mono,monospace;">₹${fmt2(total)}</div></div>
-      <div style="background:#f0f7ff;border:1.5px solid #90b8e8;border-radius:8px;padding:8px 14px;text-align:center;"><div style="font-size:.62rem;font-weight:800;color:#1565c0;text-transform:uppercase;">Own Funds</div><div style="font-size:1rem;font-weight:900;color:#1565c0;font-family:JetBrains Mono,monospace;">₹${fmt2(ownTotal)}</div></div>
-      <div style="background:#fff3f3;border:1.5px solid #f4c2b8;border-radius:8px;padding:8px 14px;text-align:center;"><div style="font-size:.62rem;font-weight:800;color:#c0392b;text-transform:uppercase;">Loan</div><div style="font-size:1rem;font-weight:900;color:#c0392b;font-family:JetBrains Mono,monospace;">₹${fmt2(loanTotal)}</div></div>
       <div style="background:#fff8ee;border:1.5px solid #ffcc80;border-radius:8px;padding:8px 14px;text-align:center;"><div style="font-size:.62rem;font-weight:800;color:#b56a00;text-transform:uppercase;">Entries</div><div style="font-size:1rem;font-weight:900;color:#b56a00;">${entries.length}</div></div>
     </div>
     <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:.78rem;">
@@ -308,16 +299,16 @@ Object.assign(APP, {
         <th style="padding:7px 8px;text-align:left;font-size:.7rem;">Paid To</th>
         <th style="padding:7px 8px;text-align:left;font-size:.7rem;">Amount</th>
         <th style="padding:7px 8px;text-align:left;font-size:.7rem;">Mode</th>
-        <th style="padding:7px 8px;text-align:left;font-size:.7rem;">Source</th>
         <th style="padding:7px 8px;text-align:left;font-size:.7rem;">Reference</th>
         <th style="padding:7px 8px;text-align:left;font-size:.7rem;">Notes</th>
       </tr></thead>
-      <tbody>${rows||'<tr><td colspan="8" style="text-align:center;padding:12px;color:#888;">No ledger entries</td></tr>'}</tbody>
+      <tbody>${rows||'<tr><td colspan="7" style="text-align:center;padding:12px;color:#888;">No ledger entries</td></tr>'}</tbody>
     </table></div>
-    <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">
-      <button onclick="APP._propLedgerPDF('${propId}')" style="background:#e53935;color:#fff;border:none;border-radius:7px;padding:7px 14px;font-family:Nunito,sans-serif;font-size:.78rem;font-weight:800;cursor:pointer;">📄 PDF</button>${APP._pdfOriHtml()}
-      <button onclick="APP._propLedgerWord('${propId}')" style="background:#1565c0;color:#fff;border:none;border-radius:7px;padding:7px 14px;font-family:Nunito,sans-serif;font-size:.78rem;font-weight:800;cursor:pointer;">📝 Word</button>
-      <button onclick="APP._propLedgerCSV('${propId}')" style="background:#2e7d32;color:#fff;border:none;border-radius:7px;padding:7px 14px;font-family:Nunito,sans-serif;font-size:.78rem;font-weight:800;cursor:pointer;">📊 Excel/CSV</button>
+    <div class="export-toolbar">
+      ${APP._pdfOriHtml()}
+      <button onclick="APP._propLedgerPDF('${propId}')" class="btn b-out export-tool-btn export-tool-pdf"><span class="material-symbols-outlined">picture_as_pdf</span><span>PDF</span></button>
+      <button onclick="APP._propLedgerWord('${propId}')" class="btn b-out export-tool-btn export-tool-word"><span class="material-symbols-outlined">description</span><span>Word</span></button>
+      <button onclick="APP._propLedgerCSV('${propId}')" class="btn b-out export-tool-btn export-tool-csv"><span class="material-symbols-outlined">table_view</span><span>CSV</span></button>
       <button onclick="document.getElementById('propLedgerM').remove();APP.openAddPaymentModal('${propId}')" style="background:#1a7a45;color:#fff;border:none;border-radius:7px;padding:7px 14px;font-family:Nunito,sans-serif;font-size:.78rem;font-weight:800;cursor:pointer;">💰 + Add Payment</button>
     </div>`;
 
@@ -342,14 +333,11 @@ Object.assign(APP, {
     const entries=this._getPropLedger(p);
     const fmt2=window.fmt||(n=>Number(n).toLocaleString('en-IN'));
     const total=entries.reduce((s,e)=>s+Number(e.amount||0),0);
-    const ownTotal=entries.filter(e=>e.source==='Own').reduce((s,e)=>s+Number(e.amount||0),0);
-    const loanTotal=entries.filter(e=>e.source==='Loan').reduce((s,e)=>s+Number(e.amount||0),0);
     const title=p.name+' — Builder Payment Ledger';
-    const cols=['Date','Purpose','Paid To','Amount (₹)','Mode','Source','Reference','Notes'];
+    const cols=['Date','Purpose','Paid To','Amount (₹)','Mode','Reference','Notes'];
     const pdfRows=entries.map(e=>[
       e.date?fD(e.date):'—', e.purpose, e.paidTo,
-      'Rs.'+fmt2(e.amount), e.mode, e.source,
-      e.reference||'—', e.notes||'—'
+      'Rs.'+fmt2(e.amount), e.mode, e.reference||'—', e.notes||'—'
     ]);
     if(typeof _makePDF==='function'){
       _makePDF({
@@ -357,8 +345,6 @@ Object.assign(APP, {
         title, subtitle:'Property: '+p.name+(p.purchaseFrom?' | Purchased From: '+p.purchaseFrom:'')+' | Generated: '+fD(new Date().toISOString().slice(0,10)),
         summaryRows:[
           ['Total Invested','Rs.'+fmt2(total),[26,122,69]],
-          ['Own Funds','Rs.'+fmt2(ownTotal),[21,101,192]],
-          ['Loan','Rs.'+fmt2(loanTotal),[192,57,43]],
           ['Entries',String(entries.length),[44,111,173]],
         ],
         entriesLabel:'Entries: '+entries.length,
@@ -367,8 +353,8 @@ Object.assign(APP, {
       });
     } else {
       // Fallback: HTML print
-      const tableRows=entries.map(e=>`<tr><td>${e.date?fD(e.date):'—'}</td><td><b>${e.purpose}</b></td><td>${e.paidTo}</td><td style="font-family:monospace;color:#1a7a45;font-weight:bold;">₹${fmt2(e.amount)}</td><td>${e.mode}</td><td style="color:${e.source==='Loan'?'#c0392b':'#1a7a45'};font-weight:bold;">${e.source}</td><td>${e.reference||'—'}</td><td>${e.notes||'—'}</td></tr>`).join('');
-      const html2=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${title}</title><style>body{font-family:Arial,sans-serif;font-size:11px;margin:16mm 14mm;}h1{color:#2c6fad;}table{width:100%;border-collapse:collapse;}th{background:#2c6fad;color:#fff;padding:5px 7px;text-align:left;}td{padding:4px 7px;border-bottom:1px solid #eee;}tr:nth-child(even){background:#fafafa;}</style></head><body><h1>${title}</h1><p>Generated: ${todayDMY()}</p><p><b>Total: ₹${fmt2(total)}</b> | Own: ₹${fmt2(ownTotal)} | Loan: ₹${fmt2(loanTotal)} | Entries: ${entries.length}</p><table><thead><tr>${cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead><tbody>${tableRows}</tbody></table></body></html>`;
+      const tableRows=entries.map(e=>`<tr><td>${e.date?fD(e.date):'—'}</td><td><b>${e.purpose}</b></td><td>${e.paidTo}</td><td style="font-family:monospace;color:#1a7a45;font-weight:bold;">₹${fmt2(e.amount)}</td><td>${e.mode}</td><td>${e.reference||'—'}</td><td>${e.notes||'—'}</td></tr>`).join('');
+      const html2=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${title}</title><style>body{font-family:Arial,sans-serif;font-size:11px;margin:16mm 14mm;}h1{color:#2c6fad;}table{width:100%;border-collapse:collapse;}th{background:#2c6fad;color:#fff;padding:5px 7px;text-align:left;}td{padding:4px 7px;border-bottom:1px solid #eee;}tr:nth-child(even){background:#fafafa;}</style></head><body><h1>${title}</h1><p>Generated: ${todayDMY()}</p><p><b>Total: ₹${fmt2(total)}</b> | Entries: ${entries.length}</p><table><thead><tr>${cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead><tbody>${tableRows}</tbody></table></body></html>`;
       const w=window.open('','_blank','width=900,height=650');if(w){w.document.write(html2);w.document.close();setTimeout(()=>w.print(),600);}
     }
     this.showToastMsg('✅ PDF generating...');
@@ -380,12 +366,10 @@ Object.assign(APP, {
     const entries=this._getPropLedger(p);
     const fmt2=window.fmt||(n=>Number(n).toLocaleString('en-IN'));
     const total=entries.reduce((s,e)=>s+Number(e.amount||0),0);
-    const ownTotal=entries.filter(e=>e.source==='Own').reduce((s,e)=>s+Number(e.amount||0),0);
-    const loanTotal=entries.filter(e=>e.source==='Loan').reduce((s,e)=>s+Number(e.amount||0),0);
     const title=p.name+' — Builder Payment Ledger';
-    const tableRows=entries.map(e=>`<w:tr><w:tc><w:p><w:r><w:t>${e.date?fD(e.date):'—'}</w:t></w:r></w:p></w:tc><w:tc><w:p><w:pPr><w:rPr><w:b/></w:rPr></w:pPr><w:r><w:rPr><w:b/></w:rPr><w:t>${(e.purpose||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>${e.paidTo}</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:rPr><w:color w:val="1a7a45"/><w:b/></w:rPr><w:t>Rs.${fmt2(e.amount)}</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>${e.mode}</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:rPr><w:color w:val="${e.source==='Loan'?'c0392b':'1a7a45'}"/></w:rPr><w:t>${e.source}</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>${(e.reference||'—').replace(/&/g,'&amp;')}</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>${(e.notes||'—').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</w:t></w:r></w:p></w:tc></w:tr>`).join('');
-    const hdrCells=['Date','Purpose','Paid To','Amount','Mode','Source','Reference','Notes'].map(h=>`<w:tc><w:tcPr><w:shd w:fill="2C6FAD" w:color="2C6FAD"/></w:tcPr><w:p><w:r><w:rPr><w:b/><w:color w:val="FFFFFF"/><w:sz w:val="18"/></w:rPr><w:t>${h}</w:t></w:r></w:p></w:tc>`).join('');
-    const xml=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><?mso-application progid="Word.Document"?><w:wordDocument xmlns:w="http://schemas.microsoft.com/office/word/2003/wordml"><w:body><w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="32"/><w:color w:val="2C6FAD"/></w:rPr><w:t>🏗️ ${title}</w:t></w:r></w:p><w:p><w:r><w:rPr><w:sz w:val="18"/><w:color w:val="666666"/></w:rPr><w:t>Generated: ${new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'long',year:'numeric'})} | Total: Rs.${fmt2(total)} | Own: Rs.${fmt2(ownTotal)} | Loan: Rs.${fmt2(loanTotal)} | Entries: ${entries.length}</w:t></w:r></w:p><w:p></w:p><w:tbl><w:tblPr><w:tblW w:w="9000" w:type="dxa"/><w:tblBorders><w:top w:val="single" w:sz="4"/><w:left w:val="single" w:sz="4"/><w:bottom w:val="single" w:sz="4"/><w:right w:val="single" w:sz="4"/><w:insideH w:val="single" w:sz="4"/><w:insideV w:val="single" w:sz="4"/></w:tblBorders></w:tblPr><w:tr>${hdrCells}</w:tr>${tableRows}</w:tbl><w:p></w:p><w:p><w:r><w:rPr><w:b/><w:color w:val="1a7a45"/></w:rPr><w:t>Total Investment: Rs.${fmt2(total)}</w:t></w:r></w:p></w:body></w:wordDocument>`;
+    const tableRows=entries.map(e=>`<w:tr><w:tc><w:p><w:r><w:t>${e.date?fD(e.date):'—'}</w:t></w:r></w:p></w:tc><w:tc><w:p><w:pPr><w:rPr><w:b/></w:rPr></w:pPr><w:r><w:rPr><w:b/></w:rPr><w:t>${(e.purpose||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>${e.paidTo}</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:rPr><w:color w:val="1a7a45"/><w:b/></w:rPr><w:t>Rs.${fmt2(e.amount)}</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>${e.mode}</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>${(e.reference||'—').replace(/&/g,'&amp;')}</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>${(e.notes||'—').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</w:t></w:r></w:p></w:tc></w:tr>`).join('');
+    const hdrCells=['Date','Purpose','Paid To','Amount','Mode','Reference','Notes'].map(h=>`<w:tc><w:tcPr><w:shd w:fill="2C6FAD" w:color="2C6FAD"/></w:tcPr><w:p><w:r><w:rPr><w:b/><w:color w:val="FFFFFF"/><w:sz w:val="18"/></w:rPr><w:t>${h}</w:t></w:r></w:p></w:tc>`).join('');
+    const xml=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><?mso-application progid="Word.Document"?><w:wordDocument xmlns:w="http://schemas.microsoft.com/office/word/2003/wordml"><w:body><w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="32"/><w:color w:val="2C6FAD"/></w:rPr><w:t>🏗️ ${title}</w:t></w:r></w:p><w:p><w:r><w:rPr><w:sz w:val="18"/><w:color w:val="666666"/></w:rPr><w:t>Generated: ${new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'long',year:'numeric'})} | Total: Rs.${fmt2(total)} | Entries: ${entries.length}</w:t></w:r></w:p><w:p></w:p><w:tbl><w:tblPr><w:tblW w:w="9000" w:type="dxa"/><w:tblBorders><w:top w:val="single" w:sz="4"/><w:left w:val="single" w:sz="4"/><w:bottom w:val="single" w:sz="4"/><w:right w:val="single" w:sz="4"/><w:insideH w:val="single" w:sz="4"/><w:insideV w:val="single" w:sz="4"/></w:tblBorders></w:tblPr><w:tr>${hdrCells}</w:tr>${tableRows}</w:tbl><w:p></w:p><w:p><w:r><w:rPr><w:b/><w:color w:val="1a7a45"/></w:rPr><w:t>Total Investment: Rs.${fmt2(total)}</w:t></w:r></w:p></w:body></w:wordDocument>`;
     const blob=new Blob([xml],{type:'application/msword'});
     const a=document.createElement('a');a.href=URL.createObjectURL(blob);
     a.download='Builder_Ledger_'+p.name.replace(/\s+/g,'_')+'_'+new Date().toISOString().slice(0,10)+'.doc';
@@ -399,11 +383,11 @@ Object.assign(APP, {
     const entries=this._getPropLedger(p);
     const fmt2=window.fmt||(n=>Number(n).toLocaleString('en-IN'));
     const total=entries.reduce((s,e)=>s+Number(e.amount||0),0);
-    const headers=['Date','Purpose','Paid To','Amount','Mode','Source','Reference','Notes'];
+    const headers=['Date','Purpose','Paid To','Amount','Mode','Reference','Notes'];
     const rows=entries.map(e=>[
       e.date?fD(e.date):'',
       '"'+(e.purpose||'').replace(/"/g,"'")+'"',
-      e.paidTo, e.amount, e.mode, e.source,
+      e.paidTo, e.amount, e.mode,
       '"'+(e.reference||'').replace(/"/g,"'")+'"',
       '"'+(e.notes||'').replace(/"/g,"'")+'"'
     ]);
@@ -451,9 +435,6 @@ Object.assign(APP, {
       const fmt2 = window.fmt || (n=>Number(n).toLocaleString('en-IN'));
       const ledger = Array.isArray(prop.ledger) ? prop.ledger : [];
       const total  = ledger.reduce((s,e)=>s+Number(e.amount||0),0);
-      const ownT   = ledger.filter(e=>e.source==='Own').reduce((s,e)=>s+Number(e.amount||0),0);
-      const loanT  = ledger.filter(e=>e.source==='Loan').reduce((s,e)=>s+Number(e.amount||0),0);
-
       box.innerHTML =
         '<h2 style="margin:0 0 4px;font-size:1.05rem;">&#128176; Builder Payments</h2>'
         +'<div style="font-size:.75rem;color:var(--mut);margin-bottom:12px;">Property: <b>'+prop.name+'</b></div>'
@@ -462,10 +443,6 @@ Object.assign(APP, {
         +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;padding:10px;background:#f0f7ff;border-radius:9px;border:1.5px solid #90b8e8;">'
         +'<div style="flex:1;text-align:center;"><div style="font-size:.6rem;font-weight:800;color:#2c6fad;text-transform:uppercase;">Total Paid</div>'
         +'<div style="font-size:1.1rem;font-weight:900;color:#1a7a45;font-family:monospace;">'+fmt2(total)+'</div></div>'
-        +'<div style="flex:1;text-align:center;"><div style="font-size:.6rem;font-weight:800;color:#1a7a45;text-transform:uppercase;">Own Funds</div>'
-        +'<div style="font-size:1.1rem;font-weight:900;color:#1a7a45;font-family:monospace;">'+fmt2(ownT)+'</div></div>'
-        +'<div style="flex:1;text-align:center;"><div style="font-size:.6rem;font-weight:800;color:#c0392b;text-transform:uppercase;">Loan</div>'
-        +'<div style="font-size:1.1rem;font-weight:900;color:#c0392b;font-family:monospace;">'+fmt2(loanT)+'</div></div>'
         +'<div style="flex:1;text-align:center;"><div style="font-size:.6rem;font-weight:800;color:#b56a00;text-transform:uppercase;">Entries</div>'
         +'<div style="font-size:1.1rem;font-weight:900;color:#b56a00;">'+ledger.length+'</div></div>'
         +'</div>'
@@ -496,12 +473,6 @@ Object.assign(APP, {
         +'<option value="DD">Demand Draft</option>'
         +'<option value="Bank Transfer">Bank Transfer</option>'
         +'</select></div>'
-        +'<div><div style="font-size:.68rem;font-weight:700;color:var(--mut);margin-bottom:2px;">&#128176; Source</div>'
-        +'<select id="apm_source" style="width:100%;padding:7px 9px;border:1.5px solid var(--bdr2);border-radius:7px;font-family:Nunito,sans-serif;font-size:.83rem;outline:none;">'
-        +'<option value="Own">Own Funds</option>'
-        +'<option value="Loan">Home Loan</option>'
-        +'<option value="Mixed">Mixed</option>'
-        +'</select></div>'
         +'<div><div style="font-size:.68rem;font-weight:700;color:var(--mut);margin-bottom:2px;">&#128278; Ref No</div>'
         +'<input id="apm_ref" placeholder="Cheque / Txn No (optional)" style="width:100%;padding:7px 9px;border:1.5px solid var(--bdr2);border-radius:7px;font-family:Nunito,sans-serif;font-size:.83rem;outline:none;"></div>'
         +'</div>'
@@ -522,7 +493,6 @@ Object.assign(APP, {
         +'<th style="padding:6px 8px;text-align:left;font-size:.68rem;">Paid To</th>'
         +'<th style="padding:6px 8px;text-align:right;font-size:.68rem;">Amount</th>'
         +'<th style="padding:6px 8px;text-align:left;font-size:.68rem;">Mode</th>'
-        +'<th style="padding:6px 8px;text-align:left;font-size:.68rem;">Source</th>'
         +'<th style="padding:6px 8px;font-size:.68rem;"></th>'
         +'</tr></thead><tbody id="apm_tbody">'
         +(ledger.length
@@ -533,11 +503,10 @@ Object.assign(APP, {
                 +'<td style="padding:5px 8px;font-size:.72rem">'+(e.paidTo||'—')+'</td>'
                 +'<td style="padding:5px 8px;font-size:.74rem;font-weight:800;color:#1a7a45;font-family:monospace;text-align:right">'+fmt2(e.amount)+'</td>'
                 +'<td style="padding:5px 8px;font-size:.72rem">'+(e.mode||'—')+'</td>'
-                +'<td style="padding:5px 8px;font-size:.72rem;color:'+(e.source==='Loan'?'#c0392b':'#1a7a45')+';font-weight:700">'+(e.source||'—')+'</td>'
                 +'<td style="padding:5px 8px;"><button data-del="'+e.id+'" style="background:none;border:none;color:#c0392b;cursor:pointer;font-size:.8rem;padding:2px 4px;">&#128465;</button></td>'
                 +'</tr>';
             }).join('')
-          : '<tr><td colspan="7" style="text-align:center;padding:12px;color:#888;font-size:.75rem;">No payments recorded yet</td></tr>'
+          : '<tr><td colspan="6" style="text-align:center;padding:12px;color:#888;font-size:.75rem;">No payments recorded yet</td></tr>'
         )
         +'</tbody></table></div>'
 
@@ -617,7 +586,6 @@ Object.assign(APP, {
         purpose: purpose,
         mode: gv('apm_mode') || 'Cheque',
         reference: gv('apm_ref'),
-        source: gv('apm_source') || 'Own',
         notes: gv('apm_notes')
       };
 
@@ -680,45 +648,69 @@ Object.assign(APP, {
     document.getElementById('delMsg').textContent='Delete property and all its tenants?';M.open('delM');
   },
 
+  _migratePropertyAnalysisData(){
+    if(this._propertyAnalysisMigrated) return;
+    this._propertyAnalysisMigrated = true;
 
-  // ══ PROPERTY VALUATION TRACKER ══
-  getPropValuations(propId){ try{ return JSON.parse(localStorage.getItem('rk_valuation_'+propId)||'[]'); }catch{ return []; } },
-  savePropValuations(propId,arr){ localStorage.setItem('rk_valuation_'+propId,JSON.stringify(arr)); if(window.fbSave) window.fbSave('valuation_'+propId,arr).catch(()=>{}); },
+    let changed = false;
+    const cleanedProps = (this.props||[]).map(p=>{
+      if(!p) return p;
+      let next = p;
+      if(Object.prototype.hasOwnProperty.call(next,'mkt')){
+        const { mkt, ...rest } = next;
+        next = rest;
+        changed = true;
+      }
+      if(Object.prototype.hasOwnProperty.call(next,'loan')){
+        const { loan, ...rest } = next;
+        next = rest;
+        changed = true;
+      }
+      if(Array.isArray(next.ledger) && next.ledger.some(e=>e && Object.prototype.hasOwnProperty.call(e,'source'))){
+        next = {
+          ...next,
+          ledger: next.ledger.map(e=>{
+            if(!e || !Object.prototype.hasOwnProperty.call(e,'source')) return e;
+            const { source, ...rest } = e;
+            return rest;
+          })
+        };
+        changed = true;
+      }
+      if(next!==p && next.cost!==undefined){
+        next = { ...next, cost: String(next.cost || 0) };
+      }
+      if(next===p) return p;
+      return next;
+    });
+    if(changed) S.set('props', cleanedProps);
+
+    try{
+      Object.keys(localStorage)
+        .filter(k=>k.startsWith('rk_valuation_'))
+        .forEach(k=>localStorage.removeItem(k));
+    }catch(e){}
+  },
+
+
   // ══════════════════════════════════════════════════
   // PROPERTY PORTFOLIO REPORT
   // ══════════════════════════════════════════════════
   _propReportData(){
-    // Build per-property stats for report
     const ps = this.props.filter(p=>!p._draft);
     const rows = ps.map(p=>{
-      const vals = this.getPropValuations(p.id);
-      const latestMkt = vals.length ? Number(vals[vals.length-1].value)||0 : 0;
-      const mktVal = latestMkt>0 ? latestMkt : Number(p.mkt||0);
       const led = p.ledger&&Array.isArray(p.ledger)&&p.ledger.length ? p.ledger : null;
       const invested = led ? led.reduce((s,e)=>s+Number(e.amount||0),0) : Number(p.cost||0);
-      const ownFunds = led ? led.filter(e=>e.source==='Own').reduce((s,e)=>s+Number(e.amount||0),0) : invested;
-      const loanPaid = led ? led.filter(e=>e.source==='Loan').reduce((s,e)=>s+Number(e.amount||0),0) : 0;
-      const loan = Number(p.loan||0);
-      const effVal = mktVal>0 ? mktVal : invested;
-      const gain = mktVal>0&&invested>0 ? mktVal-invested : 0;
-      const gainPct = invested>0&&mktVal>0 ? (gain/invested*100).toFixed(1) : '—';
-      const netAsset = effVal - loan;
       return {
-        name: p.name||'—', type: p.type||'—', city: p.city||'—',
+        name: p.name||'—',
+        type: p.type||'—',
+        city: p.city||'—',
         purchaseDate: p.date ? fD(p.date) : '—',
-        invested, ownFunds, loanPaid, mktVal, loan, effVal, gain, gainPct, netAsset,
-        hasMkt: mktVal>0
+        invested
       };
     });
     const totals = {
-      invested: rows.reduce((s,r)=>s+r.invested,0),
-      ownFunds: rows.reduce((s,r)=>s+r.ownFunds,0),
-      loanPaid: rows.reduce((s,r)=>s+r.loanPaid,0),
-      mktVal:   rows.filter(r=>r.hasMkt).reduce((s,r)=>s+r.mktVal,0),
-      loan:     rows.reduce((s,r)=>s+r.loan,0),
-      effVal:   rows.reduce((s,r)=>s+r.effVal,0),
-      gain:     rows.reduce((s,r)=>s+r.gain,0),
-      netAsset: rows.reduce((s,r)=>s+r.netAsset,0),
+      invested: rows.reduce((s,r)=>s+r.invested,0)
     };
     return {rows, totals};
   },
@@ -727,8 +719,6 @@ Object.assign(APP, {
     const {rows, totals} = this._propReportData();
     const f = n => fmt(n);
     const dateStr = new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
-
-    // Build modal HTML with inline table
     const tblRows = rows.map((r,i)=>`
       <tr style="background:${i%2===0?'#fff':'#f8f9ff'};">
         <td style="padding:7px 10px;font-weight:700;font-size:.78rem;">${r.name}</td>
@@ -736,19 +726,12 @@ Object.assign(APP, {
         <td style="padding:7px 10px;font-size:.72rem;color:var(--mut);">${r.city}</td>
         <td style="padding:7px 10px;font-size:.72rem;color:var(--mut);">${r.purchaseDate}</td>
         <td style="padding:7px 10px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:.76rem;color:var(--acc);font-weight:700;">${f(r.invested)}</td>
-        <td style="padding:7px 10px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:.76rem;color:var(--grn);">${f(r.ownFunds)}</td>
-        <td style="padding:7px 10px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:.76rem;color:var(--red);">${r.loan?f(r.loan):'—'}</td>
-        <td style="padding:7px 10px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:.76rem;color:${r.hasMkt?'var(--grn)':'var(--mut)'};">${r.hasMkt?f(r.mktVal):'—'}</td>
-        <td style="padding:7px 10px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:.76rem;color:${r.gain>=0?'var(--grn)':'var(--red)'};">${r.hasMkt?(r.gain>=0?'+':'')+f(Math.abs(r.gain))+' ('+r.gainPct+'%)':'—'}</td>
-        <td style="padding:7px 10px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:.8rem;color:var(--pur);font-weight:900;">${f(r.netAsset)}</td>
       </tr>`).join('');
 
     const thS = 'padding:8px 10px;text-align:right;font-size:.65rem;text-transform:uppercase;letter-spacing:.06em;color:#fff;font-family:"JetBrains Mono",monospace;white-space:nowrap;border-bottom:2px solid #1a3a6e;';
     const thL = 'padding:8px 10px;text-align:left;font-size:.65rem;text-transform:uppercase;letter-spacing:.06em;color:#fff;font-family:"JetBrains Mono",monospace;white-space:nowrap;border-bottom:2px solid #1a3a6e;';
-
     const html = `<div class="overlay open" id="propReportModal" onclick="if(event.target===this)APP._closePropReport()" style="z-index:600;">
-      <div class="modal" style="max-width:98vw;width:1100px;padding:0;display:flex;flex-direction:column;max-height:92vh;">
-        <!-- Header -->
+      <div class="modal" style="max-width:98vw;width:1040px;padding:0;display:flex;flex-direction:column;max-height:92vh;">
         <div style="background:linear-gradient(135deg,#1e3a6e,#2c6fad);padding:16px 20px;border-radius:12px 12px 0 0;flex-shrink:0;">
           <div style="display:flex;align-items:center;justify-content:space-between;">
             <div>
@@ -758,38 +741,18 @@ Object.assign(APP, {
             <button onclick="APP._closePropReport()" style="background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:.82rem;font-weight:700;">✕ Close</button>
           </div>
         </div>
-
-        <!-- Summary Pills -->
-        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;padding:12px 16px;background:#f8faff;border-bottom:1px solid var(--bdr);flex-shrink:0;">
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;padding:12px 16px;background:#f8faff;border-bottom:1px solid var(--bdr);flex-shrink:0;">
           <div style="background:#fff;border:1.5px solid #90b8e8;border-radius:9px;padding:9px 11px;text-align:center;">
             <div style="font-size:.58rem;font-weight:800;color:#2c6fad;text-transform:uppercase;margin-bottom:3px;">Total Invested</div>
             <div style="font-size:.95rem;font-weight:900;color:#1a3a6e;font-family:'JetBrains Mono',monospace;">${f(totals.invested)}</div>
           </div>
-          <div style="background:#fff;border:1.5px solid #90c8a0;border-radius:9px;padding:9px 11px;text-align:center;">
-            <div style="font-size:.58rem;font-weight:800;color:#1a7a45;text-transform:uppercase;margin-bottom:3px;">Own Funds</div>
-            <div style="font-size:.95rem;font-weight:900;color:#1a7a45;font-family:'JetBrains Mono',monospace;">${f(totals.ownFunds)}</div>
-          </div>
-          <div style="background:#fff;border:1.5px solid #fecaca;border-radius:9px;padding:9px 11px;text-align:center;">
-            <div style="font-size:.58rem;font-weight:800;color:#c0392b;text-transform:uppercase;margin-bottom:3px;">Total Loan</div>
-            <div style="font-size:.95rem;font-weight:900;color:#c0392b;font-family:'JetBrains Mono',monospace;">${totals.loan?f(totals.loan):'—'}</div>
-          </div>
-          <div style="background:#fff;border:1.5px solid #86efac;border-radius:9px;padding:9px 11px;text-align:center;">
-            <div style="font-size:.58rem;font-weight:800;color:#1a7a45;text-transform:uppercase;margin-bottom:3px;">Market Value</div>
-            <div style="font-size:.95rem;font-weight:900;color:#1a7a45;font-family:'JetBrains Mono',monospace;">${totals.mktVal?f(totals.mktVal):'Partial'}</div>
-          </div>
-          <div style="background:#fff;border:1.5px solid #c0a0f0;border-radius:9px;padding:9px 11px;text-align:center;">
-            <div style="font-size:.58rem;font-weight:800;color:#5c3496;text-transform:uppercase;margin-bottom:3px;">Total Gain</div>
-            <div style="font-size:.95rem;font-weight:900;color:${totals.gain>=0?'#1a7a45':'#c0392b'};font-family:'JetBrains Mono',monospace;">${totals.gain?(totals.gain>=0?'+':'')+f(Math.abs(totals.gain)):'—'}</div>
-          </div>
-          <div style="background:linear-gradient(135deg,#f5f0ff,#ede0ff);border:1.5px solid #c0a0f0;border-radius:9px;padding:9px 11px;text-align:center;">
-            <div style="font-size:.58rem;font-weight:800;color:#5c3496;text-transform:uppercase;margin-bottom:3px;">Net Asset Value</div>
-            <div style="font-size:.95rem;font-weight:900;color:#5c3496;font-family:'JetBrains Mono',monospace;">${f(totals.netAsset)}</div>
+          <div style="background:#fff8ee;border:1.5px solid #ffcc80;border-radius:9px;padding:9px 11px;text-align:center;">
+            <div style="font-size:.58rem;font-weight:800;color:#b56a00;text-transform:uppercase;margin-bottom:3px;">Properties</div>
+            <div style="font-size:.95rem;font-weight:900;color:#b56a00;">${rows.length}</div>
           </div>
         </div>
-
-        <!-- Table -->
         <div style="overflow:auto;flex:1;">
-          <table style="width:100%;border-collapse:collapse;min-width:900px;">
+          <table style="width:100%;border-collapse:collapse;min-width:560px;">
             <thead>
               <tr style="background:linear-gradient(135deg,#1e3a6e,#2c6fad);">
                 <th style="${thL}">Property</th>
@@ -797,31 +760,17 @@ Object.assign(APP, {
                 <th style="${thL}">City</th>
                 <th style="${thL}">Purchase</th>
                 <th style="${thS}">Invested</th>
-                <th style="${thS}">Own Funds</th>
-                <th style="${thS}">Loan</th>
-                <th style="${thS}">Mkt Value</th>
-                <th style="${thS}">Gain / Loss</th>
-                <th style="${thS}">Net Asset</th>
               </tr>
             </thead>
-            <tbody>
-              ${tblRows}
-            </tbody>
+            <tbody>${tblRows}</tbody>
             <tfoot>
               <tr style="background:linear-gradient(135deg,#1e3a6e,#2c6fad);">
                 <td colspan="4" style="padding:9px 10px;font-weight:900;color:#fff;font-size:.82rem;">TOTAL (${rows.length} Properties)</td>
                 <td style="padding:9px 10px;text-align:right;font-family:'JetBrains Mono',monospace;font-weight:900;color:#fff;font-size:.82rem;">${f(totals.invested)}</td>
-                <td style="padding:9px 10px;text-align:right;font-family:'JetBrains Mono',monospace;font-weight:900;color:#90f0b0;font-size:.82rem;">${f(totals.ownFunds)}</td>
-                <td style="padding:9px 10px;text-align:right;font-family:'JetBrains Mono',monospace;font-weight:900;color:#fca5a5;font-size:.82rem;">${totals.loan?f(totals.loan):'—'}</td>
-                <td style="padding:9px 10px;text-align:right;font-family:'JetBrains Mono',monospace;font-weight:900;color:#90f0b0;font-size:.82rem;">${totals.mktVal?f(totals.mktVal):'Partial'}</td>
-                <td style="padding:9px 10px;text-align:right;font-family:'JetBrains Mono',monospace;font-weight:900;color:${totals.gain>=0?'#90f0b0':'#fca5a5'};font-size:.82rem;">${totals.gain?(totals.gain>=0?'+':'')+f(Math.abs(totals.gain)):'—'}</td>
-                <td style="padding:9px 10px;text-align:right;font-family:'JetBrains Mono',monospace;font-weight:900;color:#e0d0ff;font-size:.9rem;">${f(totals.netAsset)}</td>
               </tr>
             </tfoot>
           </table>
         </div>
-
-        <!-- Download buttons -->
         <div style="display:flex;gap:8px;padding:12px 16px;border-top:1px solid var(--bdr);background:#f8faff;flex-shrink:0;flex-wrap:wrap;border-radius:0 0 12px 12px;">
           <span style="font-size:.72rem;font-weight:700;color:var(--mut);align-self:center;">Download:</span>
           <button onclick="APP._propReportPDF()" class="btn" style="background:#e53935;color:#fff;border:none;font-weight:800;">📄 PDF</button>${APP._pdfOriHtml()}
@@ -830,8 +779,6 @@ Object.assign(APP, {
         </div>
       </div>
     </div>`;
-
-    // Remove existing if open
     const ex = document.getElementById('propReportModal');
     if(ex) ex.remove();
     document.body.insertAdjacentHTML('beforeend', html);
@@ -854,33 +801,16 @@ Object.assign(APP, {
       headerColor: [30,58,110],
       accentColor: [44,111,173],
       summaryRows: [
-        ['Total Invested',    f(totals.invested),  '#2c6fad'],
-        ['Own Funds',         f(totals.ownFunds),  '#1a7a45'],
-        ['Total Loan',        totals.loan?f(totals.loan):'—', '#c0392b'],
-        ['Market Value',      totals.mktVal?f(totals.mktVal):'Partial', '#1a7a45'],
-        ['Total Gain',        totals.gain?(totals.gain>=0?'+':'')+f(Math.abs(totals.gain)):'—', totals.gain>=0?'#1a7a45':'#c0392b'],
-        ['Net Asset Value',   f(totals.netAsset),  '#5c3496'],
+        ['Total Invested', f(totals.invested), '#2c6fad'],
+        ['Properties', String(rows.length), '#b56a00'],
       ],
-      columns: ['Property','Type','City','Purchase','Invested','Own Funds','Loan','Mkt Value','Gain/Loss','Net Asset'],
+      columns: ['Property','Type','City','Purchase','Invested'],
       rows: rows.map(r=>[
-        r.name, r.type, r.city, r.purchaseDate,
-        f(r.invested), f(r.ownFunds),
-        r.loan?f(r.loan):'—',
-        r.hasMkt?f(r.mktVal):'—',
-        r.hasMkt?(r.gain>=0?'+':'')+f(Math.abs(r.gain))+' ('+r.gainPct+'%)':'—',
-        f(r.netAsset)
+        r.name, r.type, r.city, r.purchaseDate, f(r.invested)
       ]),
-      totalsRow: ['TOTAL ('+rows.length+' properties)','','','',
-        f(totals.invested), f(totals.ownFunds),
-        totals.loan?f(totals.loan):'—',
-        totals.mktVal?f(totals.mktVal):'Partial',
-        totals.gain?(totals.gain>=0?'+':'')+f(Math.abs(totals.gain)):'—',
-        f(totals.netAsset)
-      ],
+      totalsRow: ['TOTAL ('+rows.length+' properties)','','','', f(totals.invested)],
       colStyles:{
-        4:{halign:'right'}, 5:{halign:'right'}, 6:{halign:'right'},
-        7:{halign:'right'}, 8:{halign:'right'},
-        9:{halign:'right', textColor:[92,52,150], fontStyle:'bold'}
+        4:{halign:'right'}
       },
     });
   },
@@ -893,17 +823,12 @@ Object.assign(APP, {
       ['Property Portfolio Report — Raman Kumar'],
       ['Generated: '+todayDMY()],
       [],
-      ['Property','Type','City','Purchase Date','Invested (Rs)','Own Funds (Rs)','Loan (Rs)','Market Value (Rs)','Gain/Loss (Rs)','Gain %','Net Asset (Rs)'],
+      ['Property','Type','City','Purchase Date','Invested (Rs)'],
       ...rows.map(r=>[
-        esc(r.name), esc(r.type), esc(r.city), esc(r.purchaseDate),
-        f(r.invested), f(r.ownFunds), f(r.loan),
-        r.hasMkt?f(r.mktVal):'',
-        r.hasMkt?f(r.gain):'', r.hasMkt?r.gainPct:'',
-        f(r.netAsset)
+        esc(r.name), esc(r.type), esc(r.city), esc(r.purchaseDate), f(r.invested)
       ]),
       [],
-      ['TOTAL','','','',f(totals.invested),f(totals.ownFunds),f(totals.loan),
-       totals.mktVal?f(totals.mktVal):'Partial','','',f(totals.netAsset)],
+      ['TOTAL','','','',f(totals.invested)],
     ];
     const csv = lines.map(r=>Array.isArray(r)?r.join(','):r).join('\n');
     const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
@@ -921,21 +846,15 @@ Object.assign(APP, {
 
     const thS = `<w:tcPr><w:tcBorders><w:top w:val="single" w:sz="4" w:color="1E3A6E"/><w:left w:val="single" w:sz="4" w:color="1E3A6E"/><w:bottom w:val="single" w:sz="4" w:color="1E3A6E"/><w:right w:val="single" w:sz="4" w:color="1E3A6E"/></w:tcBorders><w:shd w:val="clear" w:color="auto" w:fill="2C6FAD"/></w:tcPr>`;
     const th = t => `<w:tc>${thS}<w:p><w:r><w:rPr><w:b/><w:color w:val="FFFFFF"/><w:sz w:val="16"/><w:szCs w:val="16"/></w:rPr><w:t>${t}</w:t></w:r></w:p></w:tc>`;
-
     const wRows = rows.map((r,i)=>{
       const bg = i%2===0?'FFFFFF':'F0F4FF';
       const tc = (t,col,bold)=>`<w:tc><w:tcPr><w:tcBorders><w:top w:val="single" w:sz="4" w:color="BFDBFE"/><w:left w:val="single" w:sz="4" w:color="BFDBFE"/><w:bottom w:val="single" w:sz="4" w:color="BFDBFE"/><w:right w:val="single" w:sz="4" w:color="BFDBFE"/></w:tcBorders><w:shd w:val="clear" w:color="auto" w:fill="${bg}"/></w:tcPr><w:p><w:r><w:rPr>${bold?'<w:b/>':''}<w:color w:val="${(col||'111111').replace('#','')}"/><w:sz w:val="16"/><w:szCs w:val="16"/></w:rPr><w:t>${String(t||'—').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</w:t></w:r></w:p></w:tc>`;
       return `<w:tr>
         ${tc(r.name,'1A1D23',true)}${tc(r.type,'6C757D')}${tc(r.city,'6C757D')}${tc(r.purchaseDate,'6C757D')}
-        ${tc(f(r.invested),'2C6FAD',true)}${tc(f(r.ownFunds),'1A7A45')}${tc(r.loan?f(r.loan):'—','C0392B')}
-        ${tc(r.hasMkt?f(r.mktVal):'—',r.hasMkt?'1A7A45':'6C757D')}
-        ${tc(r.hasMkt?(r.gain>=0?'+':'')+f(Math.abs(r.gain)):'—',r.gain>=0?'1A7A45':'C0392B')}
-        ${tc(f(r.netAsset),'5C3496',true)}
+        ${tc(f(r.invested),'2C6FAD',true)}
       </w:tr>`;
     }).join('');
-
-    const totRow = (t,col,bold)=>`<w:tc><w:tcPr><w:tcBorders><w:top w:val="single" w:sz="6" w:color="1E3A6E"/><w:left w:val="single" w:sz="4" w:color="1E3A6E"/><w:bottom w:val="single" w:sz="6" w:color="1E3A6E"/><w:right w:val="single" w:sz="4" w:color="1E3A6E"/></w:tcBorders><w:shd w:val="clear" w:color="auto" w:fill="1E3A6E"/></w:tcPr><w:p><w:r><w:rPr><w:b/><w:color w:val="${(col||'FFFFFF').replace('#','')}"/><w:sz w:val="18"/><w:szCs w:val="18"/></w:rPr><w:t>${String(t||'').replace(/&/g,'&amp;')}</w:t></w:r></w:p></w:tc>`;
-
+    const totRow = (t,col)=>`<w:tc><w:tcPr><w:tcBorders><w:top w:val="single" w:sz="6" w:color="1E3A6E"/><w:left w:val="single" w:sz="4" w:color="1E3A6E"/><w:bottom w:val="single" w:sz="6" w:color="1E3A6E"/><w:right w:val="single" w:sz="4" w:color="1E3A6E"/></w:tcBorders><w:shd w:val="clear" w:color="auto" w:fill="1E3A6E"/></w:tcPr><w:p><w:r><w:rPr><w:b/><w:color w:val="${(col||'FFFFFF').replace('#','')}"/><w:sz w:val="18"/><w:szCs w:val="18"/></w:rPr><w:t>${String(t||'').replace(/&/g,'&amp;')}</w:t></w:r></w:p></w:tc>`;
     const docXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <?mso-application progid="Word.Document"?>
 <w:wordDocument xmlns:w="http://schemas.microsoft.com/office/word/2003/wordml"
@@ -950,23 +869,17 @@ Object.assign(APP, {
     <w:r><w:rPr><w:color w:val="3A6FA0"/><w:sz w:val="22"/></w:rPr><w:t>Raman Kumar | ${dateStr}</w:t></w:r>
   </w:p>
   <w:p><w:r><w:t> </w:t></w:r></w:p>
-  <!-- Summary -->
   <w:p><w:r><w:rPr><w:b/><w:color w:val="1E3A6E"/><w:sz w:val="24"/></w:rPr><w:t>Portfolio Summary</w:t></w:r></w:p>
   <w:tbl><w:tblPr><w:tblW w:w="5000" w:type="pct"/><w:tblBorders><w:insideH w:val="single" w:sz="4" w:color="BFDBFE"/><w:insideV w:val="single" w:sz="4" w:color="BFDBFE"/></w:tblBorders></w:tblPr>
     <w:tr><w:tc><w:p><w:r><w:rPr><w:b/></w:rPr><w:t>Total Invested</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:rPr><w:b/><w:color w:val="2C6FAD"/></w:rPr><w:t>${f(totals.invested)}</w:t></w:r></w:p></w:tc></w:tr>
-    <w:tr><w:tc><w:p><w:r><w:t>Own Funds</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:rPr><w:color w:val="1A7A45"/></w:rPr><w:t>${f(totals.ownFunds)}</w:t></w:r></w:p></w:tc></w:tr>
-    <w:tr><w:tc><w:p><w:r><w:t>Total Loan (Outstanding)</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:rPr><w:color w:val="C0392B"/></w:rPr><w:t>${totals.loan?f(totals.loan):'—'}</w:t></w:r></w:p></w:tc></w:tr>
-    <w:tr><w:tc><w:p><w:r><w:t>Market Value (where known)</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:rPr><w:color w:val="1A7A45"/></w:rPr><w:t>${totals.mktVal?f(totals.mktVal):'Partial'}</w:t></w:r></w:p></w:tc></w:tr>
-    <w:tr><w:tc><w:p><w:r><w:t>Total Gain (mkt props)</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:rPr><w:color w:val="${totals.gain>=0?'1A7A45':'C0392B'}"/></w:rPr><w:t>${totals.gain?(totals.gain>=0?'+':'')+f(Math.abs(totals.gain)):'—'}</w:t></w:r></w:p></w:tc></w:tr>
-    <w:tr><w:tc><w:p><w:r><w:rPr><w:b/></w:rPr><w:t>NET ASSET VALUE</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:rPr><w:b/><w:color w:val="5C3496"/></w:rPr><w:t>${f(totals.netAsset)}</w:t></w:r></w:p></w:tc></w:tr>
+    <w:tr><w:tc><w:p><w:r><w:t>Properties</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:rPr><w:color w:val="B56A00"/></w:rPr><w:t>${rows.length}</w:t></w:r></w:p></w:tc></w:tr>
   </w:tbl>
   <w:p><w:r><w:t> </w:t></w:r></w:p>
-  <!-- Detail Table -->
   <w:p><w:r><w:rPr><w:b/><w:color w:val="1E3A6E"/><w:sz w:val="24"/></w:rPr><w:t>Property-wise Detail</w:t></w:r></w:p>
   <w:tbl><w:tblPr><w:tblW w:w="10000" w:type="pct"/><w:tblBorders><w:insideH w:val="single" w:sz="4" w:color="BFDBFE"/><w:insideV w:val="single" w:sz="4" w:color="BFDBFE"/></w:tblBorders></w:tblPr>
-    <w:tr>${th('Property')}${th('Type')}${th('City')}${th('Purchase')}${th('Invested')}${th('Own Funds')}${th('Loan')}${th('Mkt Value')}${th('Gain/Loss')}${th('Net Asset')}</w:tr>
+    <w:tr>${th('Property')}${th('Type')}${th('City')}${th('Purchase')}${th('Invested')}</w:tr>
     ${wRows}
-    <w:tr>${totRow('TOTAL ('+rows.length+' props)')}${totRow('')}${totRow('')}${totRow('')}${totRow(f(totals.invested),'90F0B0')}${totRow(f(totals.ownFunds),'90F0B0')}${totRow(totals.loan?f(totals.loan):'—','FCA5A5')}${totRow(totals.mktVal?f(totals.mktVal):'Partial','90F0B0')}${totRow(totals.gain?(totals.gain>=0?'+':'')+f(Math.abs(totals.gain)):'—',totals.gain>=0?'90F0B0':'FCA5A5')}${totRow(f(totals.netAsset),'E0D0FF')}</w:tr>
+    <w:tr>${totRow('TOTAL ('+rows.length+' props)')}${totRow('')}${totRow('')}${totRow('')}${totRow(f(totals.invested),'90F0B0')}</w:tr>
   </w:tbl>
   <w:p><w:r><w:t> </w:t></w:r></w:p>
   <w:p><w:pPr><w:jc w:val="center"/></w:pPr>
@@ -974,155 +887,12 @@ Object.assign(APP, {
   </w:p>
 </w:body>
 </w:wordDocument>`;
-
     const blob = new Blob([docXml], {type:'application/msword'});
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = 'Property_Portfolio_'+new Date().toISOString().slice(0,10)+'.doc';
     a.click();
     this.showToastMsg('📝 Word document downloaded!');
-  },
-
-
-  openValuationModal(propId){
-    const p=this.props.find(x=>x.id===propId);
-    if(!p) return;
-    const today=new Date().toISOString().split('T')[0];
-    const cost=Number(p.cost)||0;
-
-    const render=()=>{
-      const vs=this.getPropValuations(propId).sort((a,b)=>a.date.localeCompare(b.date));
-      const latest=vs.length?vs[vs.length-1]:null;
-      const latestVal=latest?Number(latest.value):(Number(p.mkt)||0);
-      const gain=cost&&latestVal?latestVal-cost:0;
-      const gainPct=cost&&latestVal?(((latestVal-cost)/cost)*100).toFixed(1):null;
-      const purchDate=p.date||'';
-      const yrs=purchDate&&latest?((new Date(latest.date)-new Date(purchDate))/31557600000):0;
-      const cagr=cost&&latestVal&&yrs>0.1?(((latestVal/cost)**(1/yrs)-1)*100).toFixed(1)+'%':'—';
-
-      // SVG chart — show even with 1 valuation (use cost as base point)
-      let chart='';
-      const chartPts=[];
-      if(cost&&purchDate) chartPts.push({date:purchDate,value:cost,label:'Purchase'});
-      vs.forEach(v=>chartPts.push({date:v.date,value:Number(v.value),label:fD(v.date)}));
-      if(chartPts.length>=1){
-        const allVals=chartPts.map(pt=>pt.value).filter(Boolean);
-        const mn=Math.min(...allVals)*0.92, mx=Math.max(...allVals)*1.05;
-        const W=340,H=90;
-        const N=chartPts.length;
-        const sx=i=>N<2?W/2:Math.round(i*(W-30)/(N-1))+15;
-        const sy=v=>mx===mn?H/2:Math.round(H-((v-mn)/(mx-mn))*(H-12)-6);
-        const linePoints=chartPts.map((pt,i)=>sx(i)+','+sy(pt.value)).join(' ');
-        const areaPath=chartPts.map((pt,i)=>(i===0?'M':'L')+sx(i)+','+sy(pt.value)).join(' ')
-          +' L'+sx(N-1)+','+H+' L'+sx(0)+','+H+' Z';
-        chart=`<div style="background:linear-gradient(135deg,#f0f7ff,#e8f5ff);border:1.5px solid #90b8e8;border-radius:12px;padding:14px;margin-bottom:14px;">
-          <div style="font-weight:800;font-size:.82rem;color:#1a3a6e;margin-bottom:8px;">📈 Value Growth Chart</div>
-          <svg viewBox="0 0 ${W} ${H+30}" style="width:100%;height:110px;overflow:visible;">
-            <defs><linearGradient id="vGrad${propId.slice(-4)}" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stop-color="#2c6fad" stop-opacity="0.25"/>
-              <stop offset="100%" stop-color="#2c6fad" stop-opacity="0.02"/>
-            </linearGradient></defs>
-            <path d="${areaPath}" fill="url(#vGrad${propId.slice(-4)})"/>
-            <polyline points="${linePoints}" fill="none" stroke="#2c6fad" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-            ${chartPts.map((pt,i)=>`
-              <circle cx="${sx(i)}" cy="${sy(pt.value)}" r="5" fill="${i===0?'#e09050':'#2c6fad'}" stroke="#fff" stroke-width="2"/>
-              <text x="${sx(i)}" y="${H+22}" text-anchor="middle" font-size="9" fill="#6c757d" font-family="Nunito,sans-serif">${pt.label.slice(0,6)}</text>
-              <text x="${sx(i)}" y="${sy(pt.value)-8}" text-anchor="middle" font-size="9" fill="#1a3a6e" font-weight="700" font-family="Nunito,sans-serif">${pt.value>=10000000?(pt.value/10000000).toFixed(1)+'Cr':pt.value>=100000?(pt.value/100000).toFixed(1)+'L':pt.value>=1000?Math.round(pt.value/1000)+'k':pt.value}</text>
-            `).join('')}
-          </svg>
-        </div>`;
-      }
-
-      const body=document.getElementById('_valBody');
-      if(!body) return;
-      body.innerHTML=`
-        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:14px;">
-          <div style="background:#f0f7ff;border:1.5px solid #90b8e8;border-radius:10px;padding:11px 13px;text-align:center;">
-            <div style="font-size:.58rem;font-weight:800;color:#2c6fad;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;">🏷️ Purchase Price</div>
-            <div style="font-size:1.05rem;font-weight:900;color:var(--txt);">${cost?fmt(cost):'Not set'}</div>
-            ${purchDate?`<div style="font-size:.6rem;color:var(--mut);margin-top:2px;">${fD(purchDate)}</div>`:''}
-          </div>
-          <div style="background:#f0faf5;border:1.5px solid #90c8a0;border-radius:10px;padding:11px 13px;text-align:center;">
-            <div style="font-size:.58rem;font-weight:800;color:#1a7a45;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;">💰 Current Value</div>
-            <div style="font-size:1.05rem;font-weight:900;color:var(--txt);">${latestVal?fmt(latestVal):'Not set'}</div>
-            ${latest?`<div style="font-size:.6rem;color:var(--mut);margin-top:2px;">As of ${fD(latest.date)}</div>`:''}
-          </div>
-          <div style="background:${gain>=0?'#f0faf5':'#fff5f5'};border:1.5px solid ${gain>=0?'#90c8a0':'#f09090'};border-radius:10px;padding:11px 13px;text-align:center;">
-            <div style="font-size:.58rem;font-weight:800;color:${gain>=0?'#1a7a45':'#c0392b'};text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;">📊 Total Gain</div>
-            <div style="font-size:1.05rem;font-weight:900;color:${gain>=0?'#1a7a45':'#c0392b'};">${gain?fmt(Math.abs(gain)):'—'}</div>
-            ${gainPct!==null?`<div style="font-size:.7rem;font-weight:800;color:${gain>=0?'#1a7a45':'#c0392b'};margin-top:2px;">${gain>=0?'▲ +':'▼ −'}${Math.abs(gainPct)}%</div>`:''}
-          </div>
-          <div style="background:#fff8ee;border:1.5px solid #e8a060;border-radius:10px;padding:11px 13px;text-align:center;">
-            <div style="font-size:.58rem;font-weight:800;color:#b56a00;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;">📈 CAGR / Year</div>
-            <div style="font-size:1.05rem;font-weight:900;color:#b56a00;">${cagr}</div>
-            ${yrs>0?`<div style="font-size:.6rem;color:var(--mut);margin-top:2px;">${yrs.toFixed(1)} yrs held</div>`:''}
-          </div>
-        </div>
-        ${chart}
-        <div style="background:var(--card2);border:1.5px solid var(--bdr);border-radius:10px;padding:12px;margin-bottom:12px;">
-          <div style="font-weight:800;font-size:.88rem;margin-bottom:8px;">➕ Add Valuation</div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;">
-            <div style="flex:1;min-width:120px;"><label style="font-size:.68rem;font-weight:700;color:var(--mut);display:block;margin-bottom:3px;">📅 Date</label>
-              <input type="date" id="_val_date" value="${today}" style="width:100%;border:1.5px solid var(--bdr2);border-radius:6px;padding:5px 8px;font-family:Nunito,sans-serif;font-size:.79rem;background:var(--bg);"></div>
-            <div style="flex:1;min-width:140px;"><label style="font-size:.68rem;font-weight:700;color:var(--mut);display:block;margin-bottom:3px;">💰 Market Value (₹)</label>
-              <input type="number" id="_val_val" placeholder="e.g. 8500000" style="width:100%;border:1.5px solid var(--bdr2);border-radius:6px;padding:5px 8px;font-family:Nunito,sans-serif;font-size:.79rem;background:var(--bg);"></div>
-            <div style="flex:1;min-width:140px;"><label style="font-size:.68rem;font-weight:700;color:var(--mut);display:block;margin-bottom:3px;">📝 Source / Note</label>
-              <input type="text" id="_val_note" placeholder="e.g. Broker estimate" style="width:100%;border:1.5px solid var(--bdr2);border-radius:6px;padding:5px 8px;font-family:Nunito,sans-serif;font-size:.79rem;background:var(--bg);"></div>
-          </div>
-          <button onclick="APP._saveValuation('${propId}')" style="background:#2c6fad;color:#fff;border:none;border-radius:8px;padding:7px 18px;font-family:Nunito,sans-serif;font-size:.83rem;font-weight:800;cursor:pointer;width:100%;margin-top:8px;">💾 Save Valuation</button>
-        </div>
-        ${vs.length?`<div style="font-weight:700;font-size:.82rem;margin-bottom:6px;">📋 Valuation History</div>
-        <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:.78rem;">
-          <thead><tr style="background:var(--card2);"><th style="padding:6px 8px;text-align:left;">Date</th><th style="padding:6px 8px;">Value</th><th style="padding:6px 8px;">Change</th><th style="padding:6px 8px;">Note</th><th></th></tr></thead>
-          <tbody>${vs.slice().reverse().map((v,i,arr)=>{
-            const prev=arr[i+1];const chg=prev?Number(v.value)-Number(prev.value):null;
-            const pct=prev&&chg?(chg/Number(prev.value)*100).toFixed(1):null;
-            return `<tr><td style="font-size:.72rem;">${fD(v.date)}</td><td class="mono" style="font-weight:700;">₹${fmt(v.value)}</td>
-              <td style="font-size:.7rem;color:${chg===null?'var(--mut)':chg>=0?'#1a7a45':'#c0392b'};font-weight:700;">${chg===null?'Base':chg>=0?'▲+'+fmt(chg)+' (+'+pct+'%)':'▼'+fmt(Math.abs(chg))+' ('+pct+'%)'}</td>
-              <td style="font-size:.7rem;color:var(--mut);">${v.note||'—'}</td>
-              <td><button onclick="(function(){var a=APP.getPropValuations('${propId}').filter(x=>x.id!=='${v.id}');APP.savePropValuations('${propId}',a);APP.openValuationModal('${propId}');})()" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.8rem;">🗑</button></td>
-            </tr>`;
-          }).join('')}</tbody></table></div>`:''}
-      `;
-    };
-
-    // Always recreate modal so title and content are fresh
-    const _oldVal=document.getElementById('_valModal');
-    if(_oldVal) _oldVal.remove();
-    const modal=document.createElement('div');
-    modal.id='_valModal';
-    modal.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center;';
-    modal.innerHTML=`<div style="width:100%;max-width:640px;background:#fff;border-radius:20px 20px 0 0;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 -8px 40px rgba(0,0,0,.3);">
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px 10px;border-bottom:1px solid #e9ecef;flex-shrink:0;background:linear-gradient(135deg,#f0f7ff,#fff);">
-        <div>
-          <div style="font-weight:800;font-size:1rem;color:#1a3a6e;">🏠 ${p.name}</div>
-          <div style="font-size:.68rem;color:var(--mut);">Property Valuation Tracker</div>
-        </div>
-        <button onclick="document.getElementById('_valModal').remove()" style="background:#f0f2f5;border:none;width:32px;height:32px;border-radius:50%;font-size:1.1rem;cursor:pointer;color:#6c757d;display:flex;align-items:center;justify-content:center;">✕</button>
-      </div>
-      <div id="_valBody" style="overflow-y:auto;padding:14px 16px;flex:1;"></div>
-    </div>`;
-    document.body.appendChild(modal);
-    modal.addEventListener('click',e=>{ if(e.target===modal) modal.remove(); });
-    render();
-    modal.style.display='flex';
-  },
-
-  _saveValuation(propId){
-    const date=document.getElementById('_val_date')?.value;
-    const val=document.getElementById('_val_val')?.value;
-    const note=document.getElementById('_val_note')?.value||'';
-    if(!date||!val){ this.showToastMsg('⚠️ Date and value required!'); return; }
-    const arr=this.getPropValuations(propId);
-    arr.push({id:'val'+Date.now(),date,value:Number(val),note});
-    arr.sort((a,b)=>a.date.localeCompare(b.date));
-    this.savePropValuations(propId,arr);
-    // Also update the property mkt value
-    const ps=this.props.map(p=>p.id===propId?{...p,mkt:val}:p);
-    S.set('props',ps);
-    this.showToastMsg('✅ Valuation saved!');
-    this.openValuationModal(propId);
-    this.renderProperty();
   },
 
   // ════════════════════════════════════════════════════════
@@ -1266,353 +1036,26 @@ Object.assign(APP, {
     this.openMaintenanceModal(propId);
   },
 
-  // ════════════════════════════════════════════════════════
-  // FEATURE 2 — EMI / LOAN AMORTISATION CALCULATOR
-  // Standalone calculator — no data saved, just calc on the fly
-  // ════════════════════════════════════════════════════════
-  openEMIModal(propId){
-    const p=this.props.find(x=>x.id===propId);
-    if(!p) return;
-    const loanAmt=Number(p.loan||0);
-
-    const old=document.getElementById('_emiModal'); if(old) old.remove();
-    const modal=document.createElement('div');
-    modal.id='_emiModal';
-    modal.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center;';
-    modal.innerHTML=`<div style="width:100%;max-width:640px;background:var(--card);border-radius:20px 20px 0 0;max-height:92vh;display:flex;flex-direction:column;box-shadow:0 -8px 40px rgba(0,0,0,.3);">
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px 10px;border-bottom:1px solid var(--bdr);flex-shrink:0;">
-        <div>
-          <div style="font-weight:800;font-size:1rem;color:var(--txt);">🏦 ${p.name}</div>
-          <div style="font-size:.68rem;color:var(--mut);">EMI / Loan Amortisation Calculator</div>
-        </div>
-        <button onclick="document.getElementById('_emiModal').remove()" style="background:var(--dim);border:none;width:32px;height:32px;border-radius:50%;font-size:1.1rem;cursor:pointer;color:var(--mut);">✕</button>
-      </div>
-      <div id="_emiBody" style="overflow-y:auto;padding:14px 16px;flex:1;-webkit-overflow-scrolling:touch;">
-        <!-- Input form -->
-        <div style="background:var(--card2);border:1.5px solid var(--bdr);border-radius:10px;padding:12px;margin-bottom:14px;">
-          <div style="font-weight:800;font-size:.85rem;margin-bottom:10px;">📊 Loan Details</div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-            <div>
-              <label style="font-size:.65rem;font-weight:700;color:var(--mut);display:block;margin-bottom:3px;">💰 Loan Amount (₹)</label>
-              <input id="_emi_principal" type="number" value="${loanAmt||''}" placeholder="e.g. 5000000"
-                style="width:100%;border:1.5px solid var(--bdr2);border-radius:6px;padding:7px 9px;font-family:Nunito,sans-serif;font-size:.85rem;background:var(--bg);color:var(--txt);"
-                oninput="APP._calcEMI()">
-            </div>
-            <div>
-              <label style="font-size:.65rem;font-weight:700;color:var(--mut);display:block;margin-bottom:3px;">📈 Interest Rate (% per year)</label>
-              <input id="_emi_rate" type="number" value="8.5" step="0.1" placeholder="e.g. 8.5"
-                style="width:100%;border:1.5px solid var(--bdr2);border-radius:6px;padding:7px 9px;font-family:Nunito,sans-serif;font-size:.85rem;background:var(--bg);color:var(--txt);"
-                oninput="APP._calcEMI()">
-            </div>
-            <div>
-              <label style="font-size:.65rem;font-weight:700;color:var(--mut);display:block;margin-bottom:3px;">📅 Tenure (Years)</label>
-              <input id="_emi_years" type="number" value="20" min="1" max="30" placeholder="e.g. 20"
-                style="width:100%;border:1.5px solid var(--bdr2);border-radius:6px;padding:7px 9px;font-family:Nunito,sans-serif;font-size:.85rem;background:var(--bg);color:var(--txt);"
-                oninput="APP._calcEMI()">
-            </div>
-            <div>
-              <label style="font-size:.65rem;font-weight:700;color:var(--mut);display:block;margin-bottom:3px;">📅 EMI Start Month</label>
-              <input id="_emi_start" type="month" value="${new Date().toISOString().slice(0,7)}"
-                style="width:100%;border:1.5px solid var(--bdr2);border-radius:6px;padding:7px 9px;font-family:Nunito,sans-serif;font-size:.85rem;background:var(--bg);color:var(--txt);"
-                oninput="APP._calcEMI()">
-            </div>
-          </div>
-        </div>
-        <!-- Results injected here by _calcEMI -->
-        <div id="_emi_result"></div>
-      </div>
-    </div>`;
-    document.body.appendChild(modal);
-    modal.addEventListener('click',e=>{ if(e.target===modal) modal.remove(); });
-    // Auto-calculate on open
-    setTimeout(()=>this._calcEMI(), 100);
-  },
-
-  _calcEMI(){
-    const P=Number((document.getElementById('_emi_principal')||{}).value||0);
-    const rAnn=Number((document.getElementById('_emi_rate')||{}).value||8.5);
-    const years=Number((document.getElementById('_emi_years')||{}).value||20);
-    const startVal=(document.getElementById('_emi_start')||{}).value||new Date().toISOString().slice(0,7);
-    const res=document.getElementById('_emi_result');
-    if(!res) return;
-    if(!P||!rAnn||!years){ res.innerHTML='<div style="color:var(--mut);font-size:.82rem;text-align:center;padding:12px;">Enter loan details above to calculate.</div>'; return; }
-
-    const r=rAnn/12/100;
-    const n=years*12;
-    const emi=P*r*Math.pow(1+r,n)/(Math.pow(1+r,n)-1);
-    const totalPayment=emi*n;
-    const totalInterest=totalPayment-P;
-
-    // SVG bar — principal vs interest
-    const pct=Math.round((P/totalPayment)*100);
-    const intPct=100-pct;
-
-    // Generate amortisation table (yearly summary)
-    let balance=P;
-    const yearRows=[];
-    const [startY,startM]=startVal.split('-').map(Number);
-    for(let yr=1;yr<=years;yr++){
-      let princPaid=0,intPaid=0;
-      for(let mo=0;mo<12&&balance>0.01;mo++){
-        const intForMonth=balance*r;
-        const princForMonth=Math.min(emi-intForMonth,balance);
-        intPaid+=intForMonth;
-        princPaid+=princForMonth;
-        balance-=princForMonth;
-      }
-      const calYear=startY+yr-1;
-      yearRows.push({yr,calYear,princPaid,intPaid,balance:Math.max(0,balance)});
-    }
-
-    // SVG donut — principal vs interest
-    const R=50,cx=65,cy=65,stroke=18;
-    const circumference=2*Math.PI*R;
-    const intArc=circumference*(intPct/100);
-    const princArc=circumference*(pct/100);
-
-    res.innerHTML=`
-      <!-- KPI strip -->
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px;">
-        <div style="background:#e3f2fd;border:1.5px solid #90b8e8;border-radius:10px;padding:10px;text-align:center;">
-          <div style="font-size:.55rem;font-weight:800;color:#1565c0;text-transform:uppercase;margin-bottom:3px;">Monthly EMI</div>
-          <div style="font-size:.95rem;font-weight:900;color:#1565c0;">${fmt(Math.round(emi))}</div>
-        </div>
-        <div style="background:#fff8ee;border:1.5px solid #e8a060;border-radius:10px;padding:10px;text-align:center;">
-          <div style="font-size:.55rem;font-weight:800;color:#b56a00;text-transform:uppercase;margin-bottom:3px;">Total Interest</div>
-          <div style="font-size:.95rem;font-weight:900;color:#b56a00;">${fmt(Math.round(totalInterest))}</div>
-          <div style="font-size:.6rem;color:#b56a00;margin-top:2px;">${intPct}% of total</div>
-        </div>
-        <div style="background:#f5f0ff;border:1.5px solid #c0a0f0;border-radius:10px;padding:10px;text-align:center;">
-          <div style="font-size:.55rem;font-weight:800;color:#5c3496;text-transform:uppercase;margin-bottom:3px;">Total Payment</div>
-          <div style="font-size:.95rem;font-weight:900;color:#5c3496;">${fmt(Math.round(totalPayment))}</div>
-        </div>
-      </div>
-
-      <!-- Donut chart + bar -->
-      <div style="background:var(--card2);border:1.5px solid var(--bdr);border-radius:12px;padding:14px;margin-bottom:14px;display:flex;align-items:center;gap:16px;">
-        <svg width="130" height="130" viewBox="0 0 130 130" style="flex-shrink:0;">
-          <!-- Background circle -->
-          <circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="var(--dim)" stroke-width="${stroke}"/>
-          <!-- Interest arc (red) -->
-          <circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="#e53935" stroke-width="${stroke}"
-            stroke-dasharray="${intArc} ${circumference}" stroke-dashoffset="0"
-            transform="rotate(-90 ${cx} ${cy})" stroke-linecap="round"/>
-          <!-- Principal arc (blue) -->
-          <circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="#1565c0" stroke-width="${stroke}"
-            stroke-dasharray="${princArc} ${circumference}" stroke-dashoffset="${-intArc}"
-            transform="rotate(-90 ${cx} ${cy})" stroke-linecap="round"/>
-          <text x="${cx}" y="${cy-6}" text-anchor="middle" font-size="11" font-weight="700" fill="var(--txt)" font-family="Nunito,sans-serif">EMI</text>
-          <text x="${cx}" y="${cy+10}" text-anchor="middle" font-size="10" fill="var(--mut)" font-family="Nunito,sans-serif">${fmt(Math.round(emi))}</text>
-        </svg>
-        <div style="flex:1;">
-          <div style="margin-bottom:8px;">
-            <div style="display:flex;justify-content:space-between;font-size:.72rem;margin-bottom:3px;"><span style="color:#1565c0;font-weight:700;">🔵 Principal</span><span style="font-weight:700;">${fmt(Math.round(P))} (${pct}%)</span></div>
-            <div style="height:7px;background:var(--dim);border-radius:4px;overflow:hidden;"><div style="width:${pct}%;height:100%;background:#1565c0;border-radius:4px;"></div></div>
-          </div>
-          <div>
-            <div style="display:flex;justify-content:space-between;font-size:.72rem;margin-bottom:3px;"><span style="color:#e53935;font-weight:700;">🔴 Interest</span><span style="font-weight:700;">${fmt(Math.round(totalInterest))} (${intPct}%)</span></div>
-            <div style="height:7px;background:var(--dim);border-radius:4px;overflow:hidden;"><div style="width:${intPct}%;height:100%;background:#e53935;border-radius:4px;"></div></div>
-          </div>
-          <div style="margin-top:10px;font-size:.68rem;color:var(--mut);">
-            Loan ends: <b>${new Date(startY,startM-1+n).toLocaleString('en-IN',{month:'short',year:'numeric'})}</b>
-          </div>
-        </div>
-      </div>
-
-      <!-- Yearly amortisation table -->
-      <div style="font-weight:700;font-size:.82rem;margin-bottom:8px;">📋 Year-wise Schedule</div>
-      <div style="overflow-x:auto;border:1.5px solid var(--bdr);border-radius:10px;">
-        <table style="width:100%;border-collapse:collapse;font-size:.75rem;min-width:400px;">
-          <thead><tr style="background:var(--card2);">
-            <th style="padding:8px 10px;text-align:left;font-weight:700;">Year</th>
-            <th style="padding:8px 10px;text-align:right;font-weight:700;">Principal Paid</th>
-            <th style="padding:8px 10px;text-align:right;font-weight:700;">Interest Paid</th>
-            <th style="padding:8px 10px;text-align:right;font-weight:700;">Balance</th>
-          </tr></thead>
-          <tbody>
-            ${yearRows.map((r,i)=>`<tr style="background:${i%2===0?'var(--card)':'var(--dim)'};">
-              <td style="padding:6px 10px;font-weight:600;">Year ${r.yr} (${r.calYear})</td>
-              <td style="padding:6px 10px;text-align:right;color:#1565c0;font-weight:600;">${fmt(Math.round(r.princPaid))}</td>
-              <td style="padding:6px 10px;text-align:right;color:#e53935;">${fmt(Math.round(r.intPaid))}</td>
-              <td style="padding:6px 10px;text-align:right;font-weight:700;color:${r.balance<P*0.1?'#1a7a45':'var(--txt)'};">${r.balance<0.01?'✓ Paid off':fmt(Math.round(r.balance))}</td>
-            </tr>`).join('')}
-          </tbody>
-        </table>
-      </div>
-    `;
-  },
-
-  // ════════════════════════════════════════════════════════
-  // FEATURE 3 — ROI CHART (Return on Investment)
-  // Shows: Invested vs Market Value + Rental Income over time
-  // ════════════════════════════════════════════════════════
-  openROIModal(propId){
-    const p=this.props.find(x=>x.id===propId);
-    if(!p) return;
-
-    const led=p.ledger&&Array.isArray(p.ledger)&&p.ledger.length?p.ledger:null;
-    const invested=led?led.reduce((s,e)=>s+Number(e.amount||0),0):Number(p.cost||0);
-    const vals=this.getPropValuations(propId).sort((a,b)=>a.date.localeCompare(b.date));
-    const latestMkt=vals.length?Number(vals[vals.length-1].value):Number(p.mkt||0);
-
-    // Rental income: all payments for all tenants of this property
-    const tenantIds=this.tenants.filter(t=>t.propId===propId).map(t=>t.id);
-    const rentPayments=this.payments.filter(pm=>tenantIds.includes(pm.tenantId)&&pm.ptype!=='refund');
-    const totalRentCollected=rentPayments.reduce((s,pm)=>s+Number(pm.amount||0),0);
-
-    // Capital gain
-    const capitalGain=latestMkt&&invested?latestMkt-invested:0;
-    const totalReturn=capitalGain+totalRentCollected;
-    const roiPct=invested>0?((totalReturn/invested)*100).toFixed(1):null;
-    const capitalROI=invested>0&&capitalGain?((capitalGain/invested)*100).toFixed(1):null;
-    const rentalROI=invested>0&&totalRentCollected?((totalRentCollected/invested)*100).toFixed(1):null;
-
-    // Holding years
-    const purchDate=p.date||'';
-    const heldYrs=purchDate?((Date.now()-new Date(purchDate))/31557600000):0;
-    const annualRentalROI=invested>0&&heldYrs>0?((totalRentCollected/invested/heldYrs)*100).toFixed(1):null;
-
-    // Rental income by year — for bar chart
-    const incomeByYear={};
-    rentPayments.forEach(pm=>{
-      if(!pm.date) return;
-      const yr=pm.date.slice(0,4);
-      incomeByYear[yr]=(incomeByYear[yr]||0)+Number(pm.amount||0);
-    });
-    const years=Object.keys(incomeByYear).sort();
-    const maxIncome=Math.max(...Object.values(incomeByYear),1);
-
-    // SVG bar chart for rental income
-    const BW=34,GAP=8,SH=90,padL=14,padB=24;
-    const chartW=Math.max(280,years.length*(BW+GAP)+padL+20);
-    const bars=years.map((yr,i)=>{
-      const val=incomeByYear[yr];
-      const barH=Math.max(4,Math.round((val/maxIncome)*(SH-8)));
-      const x=padL+i*(BW+GAP);
-      const y=SH-barH;
-      const label=val>=100000?(val/100000).toFixed(1)+'L':val>=1000?Math.round(val/1000)+'k':val;
-      return `<rect x="${x}" y="${y}" width="${BW}" height="${barH}" rx="4" fill="#1565c0" opacity="0.85"/>
-        <text x="${x+BW/2}" y="${SH+14}" text-anchor="middle" font-size="9" fill="#6c757d" font-family="Nunito">${yr.slice(2)}</text>
-        <text x="${x+BW/2}" y="${y-4}" text-anchor="middle" font-size="8" font-weight="700" fill="#1a3a6e" font-family="Nunito">${label}</text>`;
-    }).join('');
-
-    const old=document.getElementById('_roiModal'); if(old) old.remove();
-    const modal=document.createElement('div');
-    modal.id='_roiModal';
-    modal.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center;';
-    modal.innerHTML=`<div style="width:100%;max-width:640px;background:var(--card);border-radius:20px 20px 0 0;max-height:92vh;display:flex;flex-direction:column;box-shadow:0 -8px 40px rgba(0,0,0,.3);">
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px 10px;border-bottom:1px solid var(--bdr);flex-shrink:0;">
-        <div>
-          <div style="font-weight:800;font-size:1rem;color:var(--txt);">📊 ${p.name}</div>
-          <div style="font-size:.68rem;color:var(--mut);">Return on Investment (ROI) Analysis</div>
-        </div>
-        <button onclick="document.getElementById('_roiModal').remove()" style="background:var(--dim);border:none;width:32px;height:32px;border-radius:50%;font-size:1.1rem;cursor:pointer;color:var(--mut);">✕</button>
-      </div>
-      <div style="overflow-y:auto;padding:14px 16px;flex:1;-webkit-overflow-scrolling:touch;">
-
-        <!-- Total ROI headline -->
-        <div style="background:${totalReturn>=0?'#e8f5e9':'#fff0f0'};border:2px solid ${totalReturn>=0?'#90c8a0':'#f09090'};border-radius:14px;padding:16px;text-align:center;margin-bottom:14px;">
-          <div style="font-size:.65rem;font-weight:800;color:${totalReturn>=0?'#1a7a45':'#c0392b'};text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;">Total Return on Investment</div>
-          <div style="font-size:2rem;font-weight:900;color:${totalReturn>=0?'#1a7a45':'#c0392b'};">${roiPct!==null?(totalReturn>=0?'+':'')+roiPct+'%':'—'}</div>
-          <div style="font-size:.72rem;color:${totalReturn>=0?'#1a7a45':'#c0392b'};margin-top:4px;">
-            ${totalReturn?fmt(Math.abs(Math.round(totalReturn)))+' '+(totalReturn>=0?'profit':'loss'):''}
-            ${heldYrs>0.1?' · '+heldYrs.toFixed(1)+' years held':''}
-          </div>
-        </div>
-
-        <!-- KPI breakdown -->
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;">
-          <div style="background:var(--card2);border:1.5px solid var(--bdr);border-radius:10px;padding:12px;">
-            <div style="font-size:.6rem;font-weight:800;color:var(--mut);text-transform:uppercase;margin-bottom:4px;">💰 Total Invested</div>
-            <div style="font-size:1rem;font-weight:900;color:var(--acc);">${invested?fmt(invested):'—'}</div>
-            ${purchDate?`<div style="font-size:.6rem;color:var(--mut);margin-top:2px;">Since ${fD(purchDate)}</div>`:''}
-          </div>
-          <div style="background:var(--card2);border:1.5px solid var(--bdr);border-radius:10px;padding:12px;">
-            <div style="font-size:.6rem;font-weight:800;color:var(--mut);text-transform:uppercase;margin-bottom:4px;">📈 Current Market Value</div>
-            <div style="font-size:1rem;font-weight:900;color:${latestMkt?'var(--grn)':'var(--mut)'};">${latestMkt?fmt(latestMkt):'Not set'}</div>
-            ${vals.length?`<div style="font-size:.6rem;color:var(--mut);margin-top:2px;">As of ${fD(vals[vals.length-1].date)}</div>`:''}
-          </div>
-          <div style="background:${capitalGain>=0?'#e8f5e9':'#fff0f0'};border:1.5px solid ${capitalGain>=0?'#90c8a0':'#f09090'};border-radius:10px;padding:12px;">
-            <div style="font-size:.6rem;font-weight:800;color:${capitalGain>=0?'#1a7a45':'#c0392b'};text-transform:uppercase;margin-bottom:4px;">🏠 Capital Gain</div>
-            <div style="font-size:1rem;font-weight:900;color:${capitalGain>=0?'#1a7a45':'#c0392b'};">${capitalGain?(capitalGain>=0?'+':'')+fmt(Math.round(capitalGain)):'—'}</div>
-            ${capitalROI?`<div style="font-size:.65rem;font-weight:700;color:${capitalGain>=0?'#1a7a45':'#c0392b'};margin-top:2px;">${capitalGain>=0?'+':''}${capitalROI}% on investment</div>`:''}
-          </div>
-          <div style="background:#e3f2fd;border:1.5px solid #90b8e8;border-radius:10px;padding:12px;">
-            <div style="font-size:.6rem;font-weight:800;color:#1565c0;text-transform:uppercase;margin-bottom:4px;">🏠 Rental Income</div>
-            <div style="font-size:1rem;font-weight:900;color:#1565c0;">${totalRentCollected?fmt(Math.round(totalRentCollected)):'—'}</div>
-            ${annualRentalROI?`<div style="font-size:.65rem;font-weight:700;color:#1565c0;margin-top:2px;">${annualRentalROI}% p.a. rental yield</div>`:''}
-          </div>
-        </div>
-
-        <!-- Rental income bar chart -->
-        ${years.length>0?`<div style="background:var(--card2);border:1.5px solid var(--bdr);border-radius:12px;padding:14px;margin-bottom:14px;">
-          <div style="font-weight:700;font-size:.82rem;margin-bottom:10px;">📊 Rental Income by Year</div>
-          <div style="overflow-x:auto;">
-            <svg viewBox="0 0 ${chartW} ${SH+padB+10}" style="width:100%;min-width:${Math.min(chartW,280)}px;height:${SH+padB+10}px;display:block;">
-              ${bars}
-              <line x1="${padL-4}" y1="0" x2="${padL-4}" y2="${SH}" stroke="var(--bdr)" stroke-width="1"/>
-              <line x1="${padL-4}" y1="${SH}" x2="${chartW-10}" y2="${SH}" stroke="var(--bdr)" stroke-width="1"/>
-            </svg>
-          </div>
-        </div>`:'<div style="background:var(--card2);border:1.5px solid var(--bdr);border-radius:10px;padding:16px;text-align:center;color:var(--mut);font-size:.82rem;margin-bottom:14px;">No rent payments recorded yet.</div>'}
-
-        <!-- ROI breakdown bar -->
-        ${invested>0&&(capitalGain||totalRentCollected)?`<div style="background:var(--card2);border:1.5px solid var(--bdr);border-radius:12px;padding:14px;">
-          <div style="font-weight:700;font-size:.82rem;margin-bottom:10px;">📊 Return Breakdown</div>
-          <div style="margin-bottom:8px;">
-            <div style="display:flex;justify-content:space-between;font-size:.72rem;margin-bottom:4px;">
-              <span style="color:#1a7a45;font-weight:700;">🏠 Capital Gain</span>
-              <span>${capitalROI?capitalROI+'%':fmt(Math.round(capitalGain))}</span>
-            </div>
-            <div style="height:8px;background:var(--dim);border-radius:4px;overflow:hidden;">
-              <div style="width:${totalReturn>0?Math.round(Math.max(0,capitalGain)/totalReturn*100):0}%;height:100%;background:#1a7a45;border-radius:4px;"></div>
-            </div>
-          </div>
-          <div>
-            <div style="display:flex;justify-content:space-between;font-size:.72rem;margin-bottom:4px;">
-              <span style="color:#1565c0;font-weight:700;">💰 Rental Income</span>
-              <span>${rentalROI?rentalROI+'%':fmt(Math.round(totalRentCollected))}</span>
-            </div>
-            <div style="height:8px;background:var(--dim);border-radius:4px;overflow:hidden;">
-              <div style="width:${totalReturn>0?Math.round(totalRentCollected/totalReturn*100):0}%;height:100%;background:#1565c0;border-radius:4px;"></div>
-            </div>
-          </div>
-        </div>`:''}
-      </div>
-    </div>`;
-    document.body.appendChild(modal);
-    modal.addEventListener('click',e=>{ if(e.target===modal) modal.remove(); });
-  },
-
   renderProperty(){
+    this._migratePropertyAnalysisData();
     // ── Backward compat ──────────────────────────────────────────────────────
     let ps=this.props.filter(p=>!p._draft).map(p=>({...p,ledger:Array.isArray(p.ledger)?p.ledger:[]}));
     if(!this.curProp&&ps.length) this.curProp='__all__';
 
     // ── Top nav ───────────────────────────────────────────────────────────────
     const nav=`<button class="pnav-btn ${'__all__'===this.curProp?'on':''}"
-        onclick="APP.curProp='__all__';APP.renderProperty()">All (${ps.length})</button>`
+        onclick="APP.setCurProp('__all__')">All (${ps.length})</button>`
       +ps.map(p=>`<button class="pnav-btn ${p.id===this.curProp?'on':''}"
-        onclick="APP.curProp='${p.id}';APP.renderProperty()"
+        onclick="APP.setCurProp('${p.id}')"
         style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
         title="${p.name}">${p.name.slice(0,18)}</button>`).join('')
       +`<button class="pnav-btn pnav-add" onclick="APP.openPropModal()">+ Add</button>`;
 
     // ── Helper: property financials ───────────────────────────────────────────
     const _pStats=(p)=>{
-      const vals=this.getPropValuations(p.id);
-      const latestMkt=vals.length?Number(vals[vals.length-1].value)||0:0;
-      const mkt=latestMkt>0?latestMkt:Number(p.mkt||0);
       const led=p.ledger&&p.ledger.length?p.ledger:null;
       const invested=led?led.reduce((s,e)=>s+Number(e.amount||0),0):Number(p.cost||0);
-      const ownFunds=led?led.filter(e=>e.source==='Own').reduce((s,e)=>s+Number(e.amount||0),0):invested;
-      const loanFunds=led?led.filter(e=>e.source==='Loan').reduce((s,e)=>s+Number(e.amount||0),0):0;
-      const loan=Number(p.loan||0);
-      const effVal=mkt>0?mkt:invested;
-      const gain=mkt>0&&invested>0?mkt-invested:0;
-      const gainPct=invested>0&&mkt>0?((mkt-invested)/invested*100).toFixed(1):null;
-      const equity=effVal-loan;
-      return {mkt,invested,ownFunds,loanFunds,loan,effVal,gain,gainPct,equity,hasMkt:mkt>0};
+      return {invested};
     };
 
     // ── Helper: tenant rent status ────────────────────────────────────────────
@@ -1634,20 +1077,10 @@ Object.assign(APP, {
     // ════════════════════════════════════════════════════════════════════════
     if(this.curProp==='__all__'){
       const allStats=ps.map(p=>({p,..._pStats(p)}));
-      const totalPortfolio=allStats.reduce((s,x)=>s+x.effVal,0);
       const totalInvested =allStats.reduce((s,x)=>s+x.invested,0);
-      const totalGain     =allStats.reduce((s,x)=>s+x.gain,0);
-      const totalLoan     =allStats.reduce((s,x)=>s+x.loan,0);
-      const totalEquity   =allStats.reduce((s,x)=>s+x.equity,0);
       const totalRent     =this.tenants.filter(t=>t.status==='active').reduce((s,t)=>s+Number(t.rent||0)+Number(t.maint||0),0);
       const totalProp     =ps.length;
       const totalTenants  =this.tenants.filter(t=>t.status==='active').length;
-
-
-
-      // Gain % on properties where market value is known
-      const mktProps=allStats.filter(x=>x.hasMkt);
-      const gainPctAll=totalInvested>0&&mktProps.length?((totalGain/totalInvested)*100).toFixed(1):null;
 
       // ── Portfolio KPI strip ───────────────────────────────────────────────
       const kpi=(label,val,sub,color,bg,icon)=>`
@@ -1658,7 +1091,7 @@ Object.assign(APP, {
         </div>`;
 
       // ── Property cards ────────────────────────────────────────────────────
-      const propCards=allStats.map(({p,invested,mkt,gain,gainPct,equity,loan,hasMkt,effVal})=>{
+      const propCards=allStats.map(({p,invested})=>{
         const pts=this.tenants.filter(t=>t.propId===p.id);
         const active=pts.filter(t=>t.status==='active');
         const monthlyRent=active.reduce((s,t)=>s+Number(t.rent||0)+Number(t.maint||0),0);
@@ -1670,7 +1103,7 @@ Object.assign(APP, {
         return `<div class="card" style="cursor:pointer;border-top:3px solid ${typeColor};transition:box-shadow .2s;"
             onmouseover="this.style.boxShadow='0 4px 18px rgba(0,0,0,.12)'"
             onmouseout="this.style.boxShadow=''"
-            onclick="APP.curProp='${p.id}';APP.renderProperty()">
+            onclick="APP.setCurProp('${p.id}')">
           <!-- Card header -->
           <div style="padding:12px 14px 10px;display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
             <div>
@@ -1682,21 +1115,16 @@ Object.assign(APP, {
               </div>
             </div>
             <div style="text-align:right;flex-shrink:0;">
-              <div style="font-size:.58rem;color:var(--mut);text-transform:uppercase;font-weight:700;">Net Asset</div>
-              <div style="font-size:.92rem;font-weight:900;color:#5c3496;font-family:'JetBrains Mono',monospace;">${equity?fmt(equity):'—'}</div>
+              <div style="font-size:.58rem;color:var(--mut);text-transform:uppercase;font-weight:700;">Properties</div>
+              <div style="font-size:.92rem;font-weight:900;color:#1565c0;font-family:'JetBrains Mono',monospace;">1</div>
             </div>
           </div>
 
           <!-- Financial row -->
-          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;border-top:1px solid var(--bdr);border-bottom:1px solid var(--bdr);">
+          <div style="display:grid;grid-template-columns:1fr 1fr;border-top:1px solid var(--bdr);border-bottom:1px solid var(--bdr);">
             <div style="padding:8px 10px;text-align:center;border-right:1px solid var(--bdr);">
               <div style="font-size:.55rem;color:var(--mut);text-transform:uppercase;font-weight:700;margin-bottom:3px;">Invested</div>
               <div style="font-size:.8rem;font-weight:800;color:var(--acc);font-family:'JetBrains Mono',monospace;">${fmt(invested)}</div>
-            </div>
-            <div style="padding:8px 10px;text-align:center;border-right:1px solid var(--bdr);">
-              <div style="font-size:.55rem;color:var(--mut);text-transform:uppercase;font-weight:700;margin-bottom:3px;">Mkt Value</div>
-              <div style="font-size:.8rem;font-weight:800;color:${hasMkt?'var(--grn)':'var(--mut)'};font-family:'JetBrains Mono',monospace;">${hasMkt?fmt(mkt):'—'}</div>
-              ${gainPct!==null?`<div style="font-size:.58rem;font-weight:700;color:${gain>=0?'var(--grn)':'var(--red)'};">${gain>=0?'▲':'▼'}${Math.abs(gainPct)}%</div>`:''}
             </div>
             <div style="padding:8px 10px;text-align:center;">
               <div style="font-size:.55rem;color:var(--mut);text-transform:uppercase;font-weight:700;margin-bottom:3px;">Monthly Rent</div>
@@ -1719,8 +1147,6 @@ Object.assign(APP, {
 
           <!-- Action buttons -->
           <div style="padding:8px 10px 10px;display:flex;gap:6px;flex-wrap:wrap;border-top:1px solid var(--bdr);">
-            <button class="btn b-sm" style="background:#e3f2fd;color:#1565c0;border:1.5px solid #90b8e8;font-weight:700;font-size:.68rem;"
-              onclick="event.stopPropagation();APP.openValuationModal('${p.id}')">📈 Value</button>
             <button class="btn b-sm" style="background:#e8f5e9;color:#1e7a45;border:1.5px solid #90c8a0;font-weight:700;font-size:.68rem;"
               onclick="event.stopPropagation();APP.openPropLedgerModal('${p.id}')">📒 Ledger</button>
             <button class="btn b-sm" style="background:#fff3e0;color:#b56a00;border:1.5px solid #ffcc80;font-weight:700;font-size:.68rem;"
@@ -1734,10 +1160,8 @@ Object.assign(APP, {
       detail=`
         <!-- Portfolio KPI strip -->
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:20px;">
-          ${kpi('Portfolio Value', totalPortfolio?fmt(totalPortfolio):'—', totalInvested?'Invested: '+fmt(totalInvested):null, '#1565c0','#e3f2fd','🏢')}
-          ${kpi('Total Gain', totalGain?fmt(Math.abs(totalGain)):'—', gainPctAll?(totalGain>=0?'▲+':'▼')+gainPctAll+'% on market props':null, totalGain>=0?'#1a7a45':'#c0392b', totalGain>=0?'#f0faf5':'#fff5f5','📈')}
+          ${kpi('Total Invested', totalInvested?fmt(totalInvested):'—', totalProp?totalProp+' properties':null, '#1565c0','#e3f2fd','🏢')}
           ${kpi('Monthly Rent', fmt(totalRent), totalTenants+' active tenant'+(totalTenants!==1?'s':''), '#b56a00','#fff8ee','💰')}
-          ${kpi('Net Asset Value', totalEquity?fmt(totalEquity):'—', totalLoan>0?'− Loan '+fmt(totalLoan):null,'#5c3496','#f5f0ff','🏦')}
           ${kpi('Properties', String(totalProp), ps.filter(p=>this.tenants.some(t=>t.propId===p.id&&t.status==='active')).length+' occupied','#0f6e56','#e1f5ee','🔑')}
         </div>
 
@@ -1868,11 +1292,8 @@ Object.assign(APP, {
               </div>
             </div>
             <div style="display:flex;gap:6px;flex-wrap:wrap;">
-              <button class="btn b-sm" style="background:#e3f2fd;color:#1565c0;border:1.5px solid #90b8e8;font-weight:700;font-size:.72rem;" onclick="APP.openValuationModal('${p.id}')">📈 Value</button>
               <button class="btn b-sm" style="background:#e8f5e9;color:#1e7a45;border:1.5px solid #90c8a0;font-weight:700;font-size:.72rem;" onclick="APP.openPropLedgerModal('${p.id}')">📒 Ledger</button>
               <button class="btn b-sm" style="background:#fce4ec;color:#c62828;border:1.5px solid #f48fb1;font-weight:700;font-size:.72rem;" onclick="APP.openMaintenanceModal('${p.id}')">🔧 Maint</button>
-              <button class="btn b-sm" style="background:#e8eaf6;color:#283593;border:1.5px solid #9fa8da;font-weight:700;font-size:.72rem;" onclick="APP.openEMIModal('${p.id}')">🏦 EMI</button>
-              <button class="btn b-sm" style="background:#e0f2f1;color:#00695c;border:1.5px solid #80cbc4;font-weight:700;font-size:.72rem;" onclick="APP.openROIModal('${p.id}')">📊 ROI</button>
               <button class="btn b-sm" style="background:#fff3e0;color:#b56a00;border:1.5px solid #ffcc80;font-weight:700;font-size:.72rem;" onclick="APP.openAddPaymentModal('${p.id}')">💰 Payment</button>
               ${p.propFiles&&p.propFiles.length?`<button class="btn b-sm" style="background:#fff8ee;color:#b56a00;border:1.5px solid #ffcc80;font-weight:700;font-size:.72rem;" onclick="APP._showPropDocs('${p.id}')">📎 Docs (${p.propFiles.length})</button>`:''}
               <button class="btn b-out b-sm" style="font-size:.72rem;" onclick="APP.openPropModal('${p.id}')">✏️ Edit</button>
@@ -1884,17 +1305,6 @@ Object.assign(APP, {
             <div style="background:var(--card);border:1.5px solid var(--bdr);border-radius:12px;padding:12px 14px;">
               <div style="font-size:.58rem;font-weight:800;color:var(--acc);text-transform:uppercase;margin-bottom:5px;">💰 Invested</div>
               <div style="font-size:1rem;font-weight:900;color:var(--acc);font-family:'JetBrains Mono',monospace;">${fmt(st.invested)}</div>
-              ${st.ownFunds!==st.invested?`<div style="font-size:.6rem;color:var(--mut);margin-top:2px;">Own ${fmt(st.ownFunds)} · Loan ${fmt(st.loanFunds)}</div>`:''}
-            </div>
-            <div style="background:var(--card);border:1.5px solid var(--bdr);border-radius:12px;padding:12px 14px;">
-              <div style="font-size:.58rem;font-weight:800;color:${st.hasMkt?'var(--grn)':'var(--mut)'};text-transform:uppercase;margin-bottom:5px;">📈 Market Value</div>
-              <div style="font-size:1rem;font-weight:900;color:${st.hasMkt?'var(--grn)':'var(--mut)'};font-family:'JetBrains Mono',monospace;">${st.hasMkt?fmt(st.mkt):'Not set'}</div>
-              ${st.gainPct!==null?`<div style="font-size:.6rem;font-weight:700;color:${st.gain>=0?'var(--grn)':'var(--red)'};">${st.gain>=0?'▲+':'▼'}${Math.abs(st.gainPct)}% · ${st.gain>=0?'+':''}${fmt(st.gain)}</div>`:''}
-            </div>
-            <div style="background:var(--card);border:1.5px solid var(--bdr);border-radius:12px;padding:12px 14px;">
-              <div style="font-size:.58rem;font-weight:800;color:#5c3496;text-transform:uppercase;margin-bottom:5px;">🏦 Net Asset</div>
-              <div style="font-size:1rem;font-weight:900;color:#5c3496;font-family:'JetBrains Mono',monospace;">${fmt(st.equity)}</div>
-              ${st.loan>0?`<div style="font-size:.6rem;color:var(--red);margin-top:2px;">Loan: ${fmt(st.loan)}</div>`:''}
             </div>
             <div style="background:var(--card);border:1.5px solid var(--bdr);border-radius:12px;padding:12px 14px;">
               <div style="font-size:.58rem;font-weight:800;color:var(--org);text-transform:uppercase;margin-bottom:5px;">💵 This Month</div>
@@ -1902,8 +1312,8 @@ Object.assign(APP, {
               <div style="font-size:.6rem;color:var(--mut);margin-top:2px;">of ${fmt(monthExp)} expected · ${collectPct}%</div>
             </div>
             <div style="background:var(--card);border:1.5px solid var(--bdr);border-radius:12px;padding:12px 14px;">
-              <div style="font-size:.58rem;font-weight:800;color:var(--grn);text-transform:uppercase;margin-bottom:5px;">📊 All-time</div>
-              <div style="font-size:1rem;font-weight:900;color:var(--grn);font-family:'JetBrains Mono',monospace;">${fmt(allColl)}</div>
+              <div style="font-size:.58rem;font-weight:800;color:#5c3496;text-transform:uppercase;margin-bottom:5px;">👥 Tenants</div>
+              <div style="font-size:1rem;font-weight:900;color:#5c3496;font-family:'JetBrains Mono',monospace;">${pts.length}</div>
               <div style="font-size:.6rem;color:var(--mut);margin-top:2px;">${pts.length} tenant${pts.length!==1?'s':''} · ${activeTens.length} active</div>
             </div>
           </div>

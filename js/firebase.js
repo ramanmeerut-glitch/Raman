@@ -116,15 +116,12 @@ setTimeout(function(){
 
 function _initFirebase() {
 (function() {
-  var FB_CONFIG = {
-    apiKey: "AIzaSyDpCSTpvQKFcT_N-3Oi1u-8GnSi6oYw2bU",
-    authDomain: "raman2909-5996e.firebaseapp.com",
-    projectId: "raman2909-5996e",
-    storageBucket: "raman2909-5996e.firebasestorage.app",
-    messagingSenderId: "917402826249",
-    appId: "1:917402826249:web:224a9f561ab8e356ccead8"
-    // ✅ Netlify domain: raman2909.netlify.app — Firebase Authorized Domains mein add karo
-  };
+  var FB_CONFIG = window.RAMAN_APP_CONFIG && window.RAMAN_APP_CONFIG.firebase;
+
+  if (!FB_CONFIG) {
+    console.warn('[Firebase] Missing config. Check js/config.js is loaded before js/firebase.js');
+    window._fbLoadError = true;
+  }
 
   // Agar Firebase scripts load nahi hue toh gracefully exit
   if (window._fbLoadError || typeof firebase === 'undefined') {
@@ -203,14 +200,39 @@ function _initFirebase() {
   function applyCloudData(data) {
     var changed = false;
     var keysChanged = [];
+    var kbAlias = {
+      kb_parties: 'kbParties',
+      kb_entries: 'kbEntries',
+      kb_cash: 'kbCash'
+    };
+    var remoteTodosUpdated = 0;
+    var localTodosUpdated = 0;
+    if (typeof data.todos_updated !== 'undefined') {
+      try { remoteTodosUpdated = parseInt(JSON.parse(data.todos_updated), 10) || 0; }
+      catch(e) { remoteTodosUpdated = parseInt(data.todos_updated, 10) || 0; }
+    }
+    try {
+      var localTodosRaw = localStorage.getItem('rk_todos_updated') || '0';
+      try { localTodosUpdated = parseInt(JSON.parse(localTodosRaw), 10) || 0; }
+      catch(e) { localTodosUpdated = parseInt(localTodosRaw, 10) || 0; }
+    } catch(e) { localTodosUpdated = 0; }
     Object.keys(data).forEach(function(k) {
       if (!data[k]) return;
-      var existing = localStorage.getItem('rk_' + k);
-      if (existing !== data[k]) {
-        localStorage.setItem('rk_' + k, data[k]);
-        changed = true;
-        keysChanged.push(k);
+      if ((k === 'todos' || k === 'todos_updated') && localTodosUpdated && (Date.now() - localTodosUpdated) < 60000) {
+        return;
       }
+      if ((k === 'todos' || k === 'todos_updated') && remoteTodosUpdated && localTodosUpdated && remoteTodosUpdated <= localTodosUpdated) {
+        return;
+      }
+      var targets = kbAlias[k] ? [k, kbAlias[k]] : [k];
+      targets.forEach(function(targetKey) {
+        var existing = localStorage.getItem('rk_' + targetKey);
+        if (existing !== data[k]) {
+          localStorage.setItem('rk_' + targetKey, data[k]);
+          changed = true;
+          keysChanged.push(targetKey);
+        }
+      });
     });
     // Re-render specific UI parts when cloud data arrives
     if (keysChanged.length > 0) {
@@ -236,7 +258,10 @@ function _initFirebase() {
             window.APP.renderNotepadTab();
           }
           // Khata — re-render if changed
-          var kbChanged = keysChanged.filter(function(k){ return k.startsWith('kb_'); });
+          var kbChanged = keysChanged.filter(function(k){
+            return k === 'kbParties' || k === 'kbEntries' || k === 'kbCash' ||
+                   k === 'kb_parties' || k === 'kb_entries' || k === 'kb_cash';
+          });
           if (kbChanged.length > 0 && window.APP) {
             if (window.APP.curTab === 'khata') window.APP.renderKhata();
             window.APP.renderPills();
@@ -245,6 +270,13 @@ function _initFirebase() {
           if (keysChanged.includes('reminders') && window.APP) {
             window.APP.renderPills();
             if (window.APP.curTab === 'reminder') window.APP.renderReminders();
+          }
+          // Tasks — clear cache and repaint active views
+          if (keysChanged.includes('todos') && window.APP) {
+            window.APP._todosCache = null;
+            if (window.APP.curTab === 'todo' && window.APP.renderTodo) window.APP.renderTodo();
+            window.APP.renderHome();
+            window.APP.renderPills();
           }
           // Done IDs — re-render reminders if changed from another device
           if (keysChanged.includes('done_ids') && window.APP) {
@@ -400,7 +432,7 @@ function _initFirebase() {
     },
 
     showDiagnostics: function() {
-      var keys = ['props','tenants','payments','reminders','patients','visits','trips','buckets','kb_parties','kb_entries','kb_cash'];
+      var keys = ['props','tenants','payments','reminders','patients','visits','trips','buckets','kbParties','kbEntries','kbCash','kb_parties','kb_entries','kb_cash'];
       var lines = keys.map(function(k) {
         var d; try{ d = JSON.parse(localStorage.getItem('rk_' + k) || '[]'); }catch{ d = []; }
         return k + ': ' + (Array.isArray(d) ? d.length : typeof d) + ' records';

@@ -7,19 +7,91 @@
 
 Object.assign(APP, {
   openSearchBar(){
-    M.open('searchOverlay');
-    // Reset
-    var inp = document.getElementById('globalSearchInp');
-    if(inp){ inp.value = ''; inp.focus(); }
-    document.getElementById('searchResultsWrap').innerHTML = '<div style="text-align:center;padding:40px 20px;color:var(--mut);"><div style="font-size:2.5rem;margin-bottom:8px;">🔍</div><div style="font-size:.9rem;font-weight:600;">Kuch bhi type karo</div><div style="font-size:.78rem;margin-top:4px;line-height:1.6;">Property · Tenant · Rent · Reminder · Medical · Travel<br>Expense · To Do · Diary · Notepad · <b style="color:#854f0b;">📒 Khata Book</b><br><span style="color:#1e7a45;font-weight:700;">— Poora dashboard ek jagah search hoga —</span></div></div>';
-    // Reset filter to All
+    this._ensureGlobalSearchBindings();
     this._searchFilter = 'all';
-    document.querySelectorAll('.sf-btn').forEach(function(b){
-      var isAll = b.getAttribute('data-f') === 'all';
-      b.style.background = isAll ? 'var(--acc)' : '';
-      b.style.color = isAll ? '#fff' : '';
-      b.style.borderColor = isAll ? 'var(--acc)' : '';
+    this._setGlobalSearchEmptyState();
+    this._openGlobalSearchResults();
+    this._syncGlobalSearchState();
+    var inp = document.getElementById('globalSearchInp');
+    if(inp){
+      inp.focus();
+      if(inp.value && inp.value.trim()) this.doSearch(inp.value);
+    }
+  },
+
+  _setGlobalSearchEmptyState(){
+    var wrap = document.getElementById('searchResultsWrap');
+    if(!wrap) return;
+    wrap.innerHTML = '<div style="text-align:center;padding:28px 18px;color:var(--mut);"><div style="font-size:1.9rem;margin-bottom:8px;">🔍</div><div style="font-size:.88rem;font-weight:700;color:var(--txt);">Type to search everything</div><div style="font-size:.76rem;line-height:1.6;margin-top:4px;">Property · Tenant · Rent · Reminder · Medical · Travel<br>Finance · To Do · Notepad · <b style="color:#854f0b;">Khata Book</b></div></div>';
+  },
+
+  _ensureGlobalSearchBindings(){
+    if(this._globalSearchBound) return;
+    this._globalSearchBound = true;
+    document.addEventListener('click', (e)=>{
+      var shell = document.getElementById('headerSearchShell');
+      if(!shell || shell.contains(e.target)) return;
+      this._closeGlobalSearchResults();
     });
+  },
+
+  _openGlobalSearchResults(){
+    var shell = document.getElementById('headerSearchShell');
+    if(shell) shell.classList.add('is-open');
+  },
+
+  _closeGlobalSearchResults(){
+    var shell = document.getElementById('headerSearchShell');
+    if(shell) shell.classList.remove('is-open');
+  },
+
+  _syncGlobalSearchState(){
+    var shell = document.getElementById('headerSearchShell');
+    var inp = document.getElementById('globalSearchInp');
+    if(shell) shell.classList.toggle('has-value', !!(inp && inp.value.trim()));
+  },
+
+  _onGlobalSearchFocus(){
+    this._ensureGlobalSearchBindings();
+    this._searchFilter = 'all';
+    this._syncGlobalSearchState();
+    this._openGlobalSearchResults();
+    var inp = document.getElementById('globalSearchInp');
+    if(inp && inp.value.trim()) this.doSearch(inp.value);
+    else this._setGlobalSearchEmptyState();
+  },
+
+  _onGlobalSearchInput(val){
+    this._ensureGlobalSearchBindings();
+    this._searchFilter = 'all';
+    this._syncGlobalSearchState();
+    this._openGlobalSearchResults();
+    if((val||'').trim()) this.doSearch(val);
+    else this._setGlobalSearchEmptyState();
+  },
+
+  _onGlobalSearchKeydown(e){
+    if(e.key === 'Escape'){
+      this._closeGlobalSearchResults();
+      e.target.blur();
+      return;
+    }
+    if(e.key === 'Enter'){
+      var first = document.querySelector('#searchResultsWrap [data-search-result="1"]');
+      if(first){
+        e.preventDefault();
+        first.click();
+      }
+    }
+  },
+
+  _clearGlobalSearch(){
+    var inp = document.getElementById('globalSearchInp');
+    if(inp) inp.value = '';
+    this._syncGlobalSearchState();
+    this._setGlobalSearchEmptyState();
+    this._openGlobalSearchResults();
+    if(inp) inp.focus();
   },
 
   setSearchFilter(btn){
@@ -56,7 +128,6 @@ Object.assign(APP, {
     h += '<button class="sf-btn-tab btn b-sm b-out" data-f="travel" onclick="APP._tabSetFilter(this)">\u2708\uFE0F Travel</button>';
     h += '<button class="sf-btn-tab btn b-sm b-out" data-f="expense" onclick="APP._tabSetFilter(this)">\u{1F4B8} Expense</button>';
     h += '<button class="sf-btn-tab btn b-sm b-out" data-f="todo" onclick="APP._tabSetFilter(this)">\u2705 To Do</button>';
-    h += '<button class="sf-btn-tab btn b-sm b-out" data-f="diary" onclick="APP._tabSetFilter(this)">\u{1F4D6} Diary</button>';
     h += '<button class="sf-btn-tab btn b-sm b-out" data-f="notepad" onclick="APP._tabSetFilter(this)">\u{1F4DD} Notepad</button>';
     h += '<button class="sf-btn-tab btn b-sm b-out" data-f="khata" onclick="APP._tabSetFilter(this)" style="background:#fff8ee;border-color:#e8a060;color:#854f0b;">\u{1F4D2} Khata Book</button>';
     h += '</div>';
@@ -124,9 +195,11 @@ Object.assign(APP, {
   doSearch(q){
     const wrap = document.getElementById('searchResultsWrap');
     if(!wrap) return;
-    q = (q||'').trim().toLowerCase();
+    const displayQ = (q||'').trim();
+    q = displayQ.toLowerCase();
+    this._syncGlobalSearchState();
     if(!q){
-      wrap.innerHTML = '<div style="text-align:center;padding:40px;color:var(--mut);">🔍 Kuch type karo...</div>';
+      this._setGlobalSearchEmptyState();
       return;
     }
     const results = [];
@@ -176,11 +249,9 @@ Object.assign(APP, {
         {label:'🏥 Medical',      tab:'medical',  desc:'Doctor visits, prescriptions, lab reports'},
         {label:'✈️ Travel',       tab:'travel',   desc:'Trips, bookings, bucket list'},
         {label:'📅 Calendar',     tab:'calendar', desc:'Monthly calendar view'},
-        {label:'📖 Diary',        tab:'diary',    desc:'Personal diary entries'},
         {label:'📝 Notepad',      tab:'notepad',  desc:'Notes, URLs, categories'},
         {label:'✅ To Do',         tab:'todo',     desc:'Task list, pending items'},
         {label:'📒 Khata Book',   tab:'khata',    desc:'Party ledger, cash register, debts'},
-        {label:'👤 Persons',      tab:'persons',  desc:'Family members, person-wise filter'},
         {label:'🔍 Search',       tab:'search',   desc:'Global search across all data'},
       ];
       navItems.forEach(n=>{
@@ -215,7 +286,7 @@ Object.assign(APP, {
           results.push({
             sec:'👤 Tenant', breadcrumb:'Rent › Tenants',
             title: self._hl(t.name||'',q),
-            preview: self._snippet((pr?pr.name:'')+' ₹'+fmt(t.rent)+'/mo '+(t.status||'')+' ph:'+(t.ph||'')+' '+(t.notes||''),q),
+            preview: self._snippet((pr?pr.name:'')+' '+fmt(t.rent)+'/mo '+(t.status||'')+' ph:'+(t.ph||'')+' '+(t.notes||''),q),
             go:'rent', itemId:t.id, itemType:'tenant', rentSub:'tenants',
             _raw: JSON.stringify(t)
           });
@@ -227,10 +298,13 @@ Object.assign(APP, {
       this.payments.forEach(p=>{
         if(matchObj(p)){
           const t = self.tenants.find(x=>x.id===p.tenantId);
+          const bankAmt = Number(p.bankAmt||p.amount||0);
+          const tdsAmt = Number(p.tdsAmt||0);
+          const grossAmt = bankAmt + tdsAmt;
           results.push({
             sec:'💰 Payment', breadcrumb:'Rent › Payments',
-            title: self._hl('₹'+fmt(p.amount)+' — '+(t?t.name:'Unknown'),q),
-            preview: self._snippet(fD(p.date)+' '+(p.mode||'')+' '+(p.ref||'')+' '+(p.note||'')+' '+(p.ptype||'payment'),q),
+            title: self._hl(fmt(grossAmt)+' credited — '+(t?t.name:'Unknown'),q),
+            preview: self._snippet(fD(p.date)+' Bank '+fmt(bankAmt)+' TDS '+fmt(tdsAmt)+' '+(p.mode||'')+' '+(p.ref||'')+' '+(p.note||'')+' '+(p.ptype||'payment'),q),
             go:'rent', itemId:p.id, itemType:'payment', rentSub:'history',
             _raw: JSON.stringify(p)
           });
@@ -247,7 +321,7 @@ Object.assign(APP, {
           results.push({
             sec:'🔔 Reminder', breadcrumb:'Reminders › '+(r.type||''),
             title: self._hl((r.name||'')+(r.type?' — '+r.type:''),q),
-            preview: self._snippet(dateInfo+' '+(r.person||'')+' '+(r.notes||'')+' before:'+(r.before||'')+'d',q),
+            preview: self._snippet(dateInfo+' '+(r.person||'')+' '+(r.notes||''),q),
             go:'reminder', itemId:r.id, itemType:'reminder',
             _raw: JSON.stringify(r)
           });
@@ -285,8 +359,9 @@ Object.assign(APP, {
         if(matchObj(t)) results.push({
           sec:'✈️ Travel', breadcrumb:'Travel',
           title: self._hl(String(t.dest||'').toUpperCase()+(t.city?' · '+t.city:''),q),
-          preview: self._snippet((t.dom||'')+' '+fD(t.dep)+' → '+fD(t.ret)+' '+(t.trans||'')+' '+(t.hotel||'')+' '+(t.notes||'')+' budget:₹'+fmt(t.budget||0),q),
+          preview: self._snippet((t.dom||'')+' '+fD(t.dep)+' → '+fD(t.ret)+' '+(t.trans||'')+' '+(t.hotel||'')+' '+(t.notes||'')+' budget:'+fmt(t.budget||0),q),
           go:'travel', itemId:t.id, itemType:'trip',
+          travelSub:(t.ret && new Date(t.ret)<new Date()) ? 'past' : 'upcoming',
           _raw: JSON.stringify(t)
         });
       });
@@ -299,7 +374,7 @@ Object.assign(APP, {
         const haystack  = JSON.stringify(e)+' '+fileNames;
         if(haystack.toLowerCase().includes(q)) results.push({
           sec:'💸 Finance', breadcrumb:'Finance › Transactions',
-          title: self._hl((e.type==='income'?'+ ':'− ')+'₹'+fmt(e.amount)+' — '+(e.cat||''),q),
+          title: self._hl((e.type==='income'?'+ ':'− ')+fmt(e.amount)+' — '+(e.cat||''),q),
           preview: self._snippet(fD(e.date)+' '+(e.note||'')+' '+(e.paymode||'')+' '+(e.account||'')+' '+(fileNames||''),q),
           go:'expense', itemId:e.id, itemType:'expense', finSub:'txn',
           _raw: JSON.stringify(e)
@@ -323,17 +398,31 @@ Object.assign(APP, {
     if(f==='all'||f==='notepad'){
       const cats = this._getNoteCategories();
       cats.forEach(cat=>{
-        const np = this._getNoteContent(cat)||'';
-        const files = (this._getNoteFiles?this._getNoteFiles(cat):[]);
-        const fileNames = files.map(f=>f.name||'').join(' ');
-        const hay = np.toLowerCase()+' '+cat.toLowerCase()+' '+fileNames.toLowerCase();
-        if(hay.includes(q)){
+        const notes = this._getCategoryNotes ? this._getCategoryNotes(cat) : [];
+        const matchedNotes = [];
+        const catHay = cat.toLowerCase()+' '+notes.map(function(note){
+          return [note.title||'', note.body||'', (note.attachments||[]).map(function(file){ return file.name||''; }).join(' ')].join(' ');
+        }).join(' ').toLowerCase();
+        notes.forEach(function(note){
+          const noteFiles=(note.attachments||[]).map(function(file){ return file.name||''; }).join(' ');
+          const hay=[cat, note.title||'', note.body||'', noteFiles].join(' ').toLowerCase();
+          if(!hay.includes(q)) return;
+          matchedNotes.push({
+            sec:'📝 Notepad', breadcrumb:'Notepad › '+cat,
+            title: self._hl(note.title||'Untitled Note',q),
+            preview: self._snippet((note.body||'') + (noteFiles ? ' [Files: '+noteFiles+']' : ''),q,60,120),
+            go:'notepad', itemId:note.id, itemType:'notepad_note', noteCat:cat,
+            _raw:hay
+          });
+        });
+        matchedNotes.forEach(function(item){ results.push(item); });
+        if(catHay.includes(q)){
           results.push({
             sec:'📝 Notepad', breadcrumb:'Notepad › '+cat,
-            title: self._hl(cat+' Notes',q),
-            preview: self._snippet(np+(fileNames?' [Files: '+fileNames+']':''),q,60,120),
+            title: self._hl(cat+' Category',q),
+            preview: self._snippet(notes.map(function(note){ return (note.title||'')+' '+(note.body||''); }).join(' '),q,60,120),
             go:'notepad', itemId:cat, itemType:'notepad_cat', noteCat:cat,
-            _raw:np
+            _raw:catHay
           });
         }
       });
@@ -353,21 +442,6 @@ Object.assign(APP, {
       });
     }
 
-    // ── Diary ──
-    if(f==='all'||f==='diary'){
-      let diary; try{ diary=JSON.parse(localStorage.getItem('rk_diary')||'[]'); }catch{ diary=[]; }
-      diary.forEach(e=>{
-        const hay = (e.body||'')+(e.title||'')+(e.tags||'')+(e.date||'');
-        if(hay.toLowerCase().includes(q)) results.push({
-          sec:'📖 Diary', breadcrumb:'Diary › '+fD(e.date),
-          title: self._hl(e.title||'(No Title)',q),
-          preview: self._snippet(e.body||'',q,60,120),
-          go:'diary', itemId:e.id, itemType:'diary',
-          _raw:e.body||''
-        });
-      });
-    }
-
     // ── Khata Book ──
     if(f==='all'||f==='khata'){
       const parties = this.kbParties||[];
@@ -381,7 +455,7 @@ Object.assign(APP, {
             sec:'📒 Khata Book', breadcrumb:'Khata › Party',
             title: self._hl(p.name||'',q),
             preview: self._snippet((p.phone||'')+' '+(p.cat||'')+' '+(p.notes||'')+
-              ' Dena:₹'+fmt(bal.dena)+' Lena:₹'+fmt(bal.lena),q,50,100),
+              ' Dena:'+fmt(bal.dena)+' Lena:'+fmt(bal.lena),q,50,100),
             go:'khata', itemId:p.id, itemType:'kb_party',
             _raw:JSON.stringify(p)
           });
@@ -393,7 +467,7 @@ Object.assign(APP, {
           const fileNames=(e.files||[]).map(f=>f.name||'').join(' ');
           results.push({
             sec:'📒 Khata Book', breadcrumb:'Khata › '+(party?party.name:'Entry'),
-            title: self._hl((e.type==='lena'?'🤲 Liya':'💸 Diya')+' ₹'+fmt(e.amount)+(party?' — '+party.name:''),q),
+            title: self._hl((e.type==='lena'?'🤲 Liya':'💸 Diya')+' '+fmt(e.amount)+(party?' — '+party.name:''),q),
             preview: self._snippet(fD(e.date)+' '+(e.note||'')+' '+(e.mode||'')+' '+fileNames,q,40,80),
             go:'khata', itemId:e.partyId, itemType:'kb_party',
             _raw:JSON.stringify(e)
@@ -403,7 +477,7 @@ Object.assign(APP, {
       cash.forEach(e=>{
         if(matchObj(e)) results.push({
           sec:'📒 Khata Book', breadcrumb:'Khata › Cash',
-          title: self._hl((e.type==='in'?'⬇️ Cash In':'⬆️ Cash Out')+' ₹'+fmt(e.amount),q),
+          title: self._hl((e.type==='in'?'⬇️ Cash In':'⬆️ Cash Out')+' '+fmt(e.amount),q),
           preview: self._snippet(fD(e.date)+' '+(e.cat||'')+' '+(e.note||''),q,40,80),
           go:'khata', itemId:'cash', itemType:'kb_cash',
           _raw:JSON.stringify(e)
@@ -415,7 +489,7 @@ Object.assign(APP, {
     if(!results.length){
       wrap.innerHTML = `<div style="text-align:center;padding:40px;color:var(--mut);font-size:.9rem;">
         <div style="font-size:2rem;margin-bottom:8px;">😕</div>
-        "<b>${q}</b>" kaheen nahi mila<br>
+        "<b>${displayQ}</b>" kaheen nahi mila<br>
         <span style="font-size:.78rem;color:var(--mut);">Try karo: property name, tenant, amount, doctor, category...</span>
       </div>`;
       return;
@@ -423,17 +497,18 @@ Object.assign(APP, {
 
     // ── Render results ──
     wrap.innerHTML = `<div style="font-size:.78rem;color:var(--mut);margin-bottom:10px;padding:4px 2px;">
-      <b>${results.length}</b> result${results.length>1?'s':''} — "<b>${q}</b>"
+      <b>${results.length}</b> result${results.length>1?'s':''} — "<b>${displayQ}</b>"
     </div>`
     + results.map((r,i)=>{
-        const nav = JSON.stringify({
+      const nav = JSON.stringify({
           q, itemId:r.itemId||'', itemType:r.itemType||'',
           patId:r.patId||'', rentSub:r.rentSub||'',
-          noteCat:r.noteCat||'', finSub:r.finSub||''
+          noteCat:r.noteCat||'', finSub:r.finSub||'',
+          travelSub:r.travelSub||''
         }).replace(/'/g,"\\'");
         const navSafe = nav.replace(/"/g,"'");
 
-        return `<div
+        return `<div data-search-result="${i===0 ? '1' : '0'}"
           style="background:var(--card);border:1.5px solid var(--bdr);border-radius:11px;padding:11px 14px;margin-bottom:7px;cursor:pointer;transition:all .15s;position:relative;"
           onmouseover="this.style.borderColor='var(--acc)';this.style.background='#f7fbff';this.style.boxShadow='0 3px 12px rgba(44,111,173,.12)'"
           onmouseout="this.style.borderColor='var(--bdr)';this.style.background='var(--card)';this.style.boxShadow='none'"
@@ -460,45 +535,42 @@ Object.assign(APP, {
 
   // ── Deep Navigation: go to exact item, highlight, scroll ──
   _deepNavigate(tab, nav){
-    const {q, itemId, itemType, patId, rentSub, noteCat} = nav;
+    const {q, itemId, itemType, patId, rentSub, noteCat, finSub, travelSub} = nav;
     // Store pending highlight
     this._pendingHighlight = q;
     this._pendingItemId = itemId;
     this._pendingItemType = itemType;
     this._pendingPatId = patId;
 
-    M.close('searchOverlay');
+    var searchOverlay = document.getElementById('searchOverlay');
+    if(searchOverlay) M.close('searchOverlay');
+    this._closeGlobalSearchResults();
+
+    if(itemType==='property' && itemId){
+      this.curProp = itemId;
+      this.goTab('property');
+      setTimeout(()=>{
+        const panel = document.getElementById('pan-property');
+        if(panel && q) this._highlightInPanel(panel, q);
+      }, 450);
+      return;
+    }
 
     if(itemType==='notepad_cat' && noteCat){
-      // Switch to exact notepad category
       this._noteActiveCat = noteCat;
+      this._noteActiveId = null;
+      this._npQuery = q || '';
+      this._npHighlightTerm = '';
       this.goTab('notepad');
       setTimeout(()=>{
-        const ta = document.getElementById('notepadMain');
-        if(ta && q){
-          // Scroll textarea to match position
-          const txt = ta.value.toLowerCase();
-          const idx = txt.indexOf(q.toLowerCase());
-          if(idx>=0){
-            // Create a temporary overlay highlight over textarea
-            this._highlightNotepadText(ta, q);
-          }
-        }
         const panel = document.getElementById('pan-notepad');
         if(panel && q) this._highlightInPanel(panel, q);
       }, 400);
       return;
     }
 
-    if(itemType==='diary' && itemId){
-      this.diaryQuery = q;
-      if(!this._diaryExpanded) this._diaryExpanded={};
-      this._diaryExpanded[itemId] = true;
-      this.goTab('diary');
-      setTimeout(()=>{
-        const panel = document.getElementById('pan-diary');
-        if(panel && q) this._highlightInPanel(panel, q);
-      }, 500);
+    if(itemType==='notepad_note' && noteCat && itemId){
+      this._npOpenNoteWithHighlight(noteCat, itemId, q||'');
       return;
     }
 
@@ -549,6 +621,16 @@ Object.assign(APP, {
       return;
     }
 
+    if(itemType==='expense' && finSub){
+      this.finSub = finSub;
+      this.goTab('expense');
+      setTimeout(()=>{
+        const panel = document.getElementById('pan-expense');
+        if(panel && q) this._highlightInPanel(panel, q);
+      }, 450);
+      return;
+    }
+
     if(itemType==='tenant' && rentSub){
       this.rentSub = rentSub;
       this.goTab('rent');
@@ -566,6 +648,16 @@ Object.assign(APP, {
         const panel = document.getElementById('pan-rent');
         if(panel && q) this._highlightInPanel(panel, q);
       }, 400);
+      return;
+    }
+
+    if(itemType==='trip'){
+      this.travelSub = travelSub || 'upcoming';
+      this.goTab('travel');
+      setTimeout(()=>{
+        const panel = document.getElementById('pan-travel');
+        if(panel && q) this._highlightInPanel(panel, q);
+      }, 450);
       return;
     }
 
@@ -766,7 +858,7 @@ Object.assign(APP, {
     const total = rent + maint;
 
     // Get UPI ID from settings or use a placeholder
-    const upiId = (this.persons && this.persons[0] && this._upiId) || '';
+    const upiId = this._upiId || '';
 
     const old = document.getElementById('_upiQRModal'); if(old) old.remove();
     const modal = document.createElement('div');
@@ -790,8 +882,8 @@ Object.assign(APP, {
       <div style="background:var(--dim);border-radius:12px;padding:10px;margin-bottom:14px;">
         <div style="font-size:.75rem;color:var(--mut);margin-bottom:2px;">Tenant</div>
         <div style="font-weight:800;font-size:.95rem;">${t.name}</div>
-        <div style="font-size:.72rem;color:var(--mut);margin-top:4px;">Rent ₹${fmt(rent)}${maint?' + Maint ₹'+fmt(maint):''}</div>
-        <div style="font-size:1.2rem;font-weight:900;color:var(--grn);margin-top:4px;">Total: ₹${fmt(total)}</div>
+        <div style="font-size:.72rem;color:var(--mut);margin-top:4px;">Rent ${fmt(rent)}${maint?' + Maint '+fmt(maint):''}</div>
+        <div style="font-size:1.2rem;font-weight:900;color:var(--grn);margin-top:4px;">Total: ${fmt(total)}</div>
       </div>
       <div style="margin-bottom:12px;">
         <label style="font-size:.7rem;font-weight:700;color:var(--mut);display:block;margin-bottom:4px;">Your UPI ID</label>
@@ -851,14 +943,12 @@ Object.assign(APP, {
     const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
     const allEvs = [];
     const dateStr = yr+'-'+String(mo+1).padStart(2,'0')+'-'+String(day).padStart(2,'0');
+    const getReminderDate=(r)=>r.mode==='recurring'
+      ? (r.nextTrigger||r.start||r.reminderDate||r.alertDate||r.trigDate||null)
+      : (r.reminderDate||r.alertDate||r.trigDate||r.dueDate||r.exp||null);
     // Collect all events for this date
     this.reminders.forEach(r=>{
-      // Check trigger date (actual reminder alert date)
-      const rTrigDate = r.trigDate || (()=>{
-        if(r.mode==='recurring') return r.nextTrigger||r.start||null;
-        if(!r.exp) return null;
-        try{ const d=new Date(r.exp); d.setDate(d.getDate()-parseInt(r.before||0)); return d.toISOString().split('T')[0]; }catch(e){return r.exp;}
-      })();
+      const rTrigDate = getReminderDate(r);
       if(rTrigDate === dateStr){
         const timeStr = (r.alertHour && r.alertMin) ? ` at ${r.alertHour}:${r.alertMin}` : '';
         allEvs.push({icon:'🔔',title:r.name,type:'Reminder'+timeStr,detail:r.type||'',color:'#1a73e8'});

@@ -28,76 +28,6 @@ Object.assign(APP, {
     try{ delete window._tnmRentHistory; }catch(e){}
   },
 
-  _normalizeTenantContactList(values){
-    const arr = Array.isArray(values) ? values : [values];
-    return arr
-      .map(function(item){ return String(item || '').trim(); })
-      .filter(Boolean);
-  },
-
-  _getTenantPhones(t){
-    if(!t || typeof t !== 'object') return [];
-    const fromArray = this._normalizeTenantContactList(t.phones);
-    if(fromArray.length) return fromArray;
-    return this._normalizeTenantContactList([t.ph, t.ph2]);
-  },
-
-  _getTenantEmails(t){
-    if(!t || typeof t !== 'object') return [];
-    const fromArray = this._normalizeTenantContactList(t.emails);
-    if(fromArray.length) return fromArray;
-    return this._normalizeTenantContactList([t.email, t.email2]);
-  },
-
-  _collectTenantContactValues(kind){
-    const wrap = document.getElementById(kind === 'phone' ? 'tnm_phone_fields' : 'tnm_email_fields');
-    if(!wrap) return [];
-    return this._normalizeTenantContactList(this._collectTenantContactDraftValues(kind));
-  },
-
-  _collectTenantContactDraftValues(kind){
-    const wrap = document.getElementById(kind === 'phone' ? 'tnm_phone_fields' : 'tnm_email_fields');
-    if(!wrap) return [];
-    return Array.from(wrap.querySelectorAll('input')).map(function(input){ return String(input.value || ''); });
-  },
-
-  _renderTenantContactFields(kind, values){
-    const wrap = document.getElementById(kind === 'phone' ? 'tnm_phone_fields' : 'tnm_email_fields');
-    if(!wrap) return;
-    const raw = Array.isArray(values) ? values.map(function(item){ return String(item ?? ''); }) : [String(values ?? '')];
-    const rows = raw.length ? raw : [''];
-    const placeholderBase = kind === 'phone' ? '+91 XXXXXXXXXX' : 'tenant@email.com';
-    const type = kind === 'email' ? 'email' : 'text';
-    const inputmode = kind === 'phone' ? 'tel' : 'email';
-    const labelBase = kind === 'phone' ? 'Mobile' : 'Email';
-    wrap.innerHTML = rows.map(function(value, index){
-      const n = index + 1;
-      const placeholder = n === 1 ? placeholderBase : `${labelBase} ${n}`;
-      const remove = index > 0
-        ? `<button type="button" class="tenant-contact-remove" onclick="APP.removeTenantContactField('${kind}',${index})" aria-label="Remove ${labelBase.toLowerCase()} ${n}">×</button>`
-        : '';
-      return `<div class="tenant-contact-row">
-        <input type="${type}" inputmode="${inputmode}" data-contact-kind="${kind}" data-contact-index="${index}" placeholder="${placeholder}" value="${String(value || '').replace(/"/g,'&quot;')}">
-        ${remove}
-      </div>`;
-    }).join('');
-  },
-
-  addTenantContactField(kind, value=''){
-    const values = this._collectTenantContactDraftValues(kind);
-    values.push(value || '');
-    this._renderTenantContactFields(kind, values);
-    const wrap = document.getElementById(kind === 'phone' ? 'tnm_phone_fields' : 'tnm_email_fields');
-    const last = wrap ? wrap.querySelector('.tenant-contact-row:last-child input') : null;
-    if(last) last.focus();
-  },
-
-  removeTenantContactField(kind, index){
-    const values = this._collectTenantContactDraftValues(kind);
-    values.splice(index, 1);
-    this._renderTenantContactFields(kind, values);
-  },
-
   openTenModal(id,propId){
     this._migrateRentHikeData();
     this.editId=id||null;
@@ -107,9 +37,7 @@ Object.assign(APP, {
     if(propId)ps.value=propId;
     if(id){
       const t=this.tenants.find(x=>x.id===id);
-      ['name','idtype','idno','addr','rent','sec','adv','maint','mode','status','doc','notes'].forEach(f=>sv('tnm_'+f,t[f]||''));
-      this._renderTenantContactFields('phone', this._getTenantPhones(t));
-      this._renderTenantContactFields('email', this._getTenantEmails(t));
+      ['name','ph','ph2','email','email2','idtype','idno','addr','rent','sec','adv','maint','mode','status','doc','notes'].forEach(f=>sv('tnm_'+f,t[f]||''));
       ps.value=t.propId;
       document.getElementById('tnm_due').value=t.due||5;
       document.getElementById('tnm_recurring').value=t.recurring||'no';
@@ -117,12 +45,8 @@ Object.assign(APP, {
       svDate('tnm_start',t.start);svDate('tnm_end',t.end);
       svDate('tnm_invdate',t.invdate||'');
     }else{
-      ['name','idno','addr','rent','sec','adv','maint','doc','notes'].forEach(f=>sv('tnm_'+f,''));
-      this._renderTenantContactFields('phone', ['']);
-      this._renderTenantContactFields('email', ['']);
+      ['name','ph','ph2','email','email2','idno','addr','rent','sec','adv','maint','doc','notes'].forEach(f=>sv('tnm_'+f,''));
       document.getElementById('tnm_due').value='5';
-      document.getElementById('tnm_idtype').value='';
-      document.getElementById('tnm_mode').value='NEFT';
       document.getElementById('tnm_status').value='active';
       document.getElementById('tnm_recurring').value='no';
       document.getElementById('tnm_invdate_row').style.display='none';
@@ -158,9 +82,7 @@ Object.assign(APP, {
       // If FUM has files use them; if FUM is empty keep existing docFiles (don't wipe them)
       const _existingDocs = this.editId ? (this.tenants.find(t=>t.id===this.editId)||{}).docFiles||[] : [];
       const _finalDocFiles = _tenDocFiles.length > 0 ? _tenDocFiles : _existingDocs;
-      const phones = this._collectTenantContactValues('phone');
-      const emails = this._collectTenantContactValues('email');
-      const data={name,phones,emails,ph:phones[0]||'',ph2:phones[1]||'',email:emails[0]||'',email2:emails[1]||'',idtype:v('tnm_idtype'),idno:v('tnm_idno'),addr:v('tnm_addr'),propId:v('tnm_prop'),rent:Number(rent),sec:Number(v('tnm_sec')),adv:Number(v('tnm_adv')),maint:Number(v('tnm_maint'))||0,start:vDate('tnm_start'),end:vDate('tnm_end'),due:Number(v('tnm_due')),mode:v('tnm_mode'),status:v('tnm_status'),doc:v('tnm_doc'),notes:v('tnm_notes'),recurring:v('tnm_recurring'),invdate:vDate('tnm_invdate'),docFiles:_finalDocFiles};
+      const data={name,ph:v('tnm_ph'),ph2:v('tnm_ph2'),email:v('tnm_email'),email2:v('tnm_email2'),idtype:v('tnm_idtype'),idno:v('tnm_idno'),addr:v('tnm_addr'),propId:v('tnm_prop'),rent:Number(rent),sec:Number(v('tnm_sec')),adv:Number(v('tnm_adv')),maint:Number(v('tnm_maint'))||0,start:vDate('tnm_start'),end:vDate('tnm_end'),due:Number(v('tnm_due')),mode:v('tnm_mode'),status:v('tnm_status'),doc:v('tnm_doc'),notes:v('tnm_notes'),recurring:v('tnm_recurring'),invdate:vDate('tnm_invdate'),docFiles:_finalDocFiles};
 
       let ts=this.tenants;
       if(this.editId){
@@ -470,7 +392,7 @@ Object.assign(APP, {
     sv('pym_amt',totalOutstanding>0?totalOutstanding:t.rent);
     svDate('pym_date',now.toISOString().split('T')[0]);
     sv('pym_ref','');sv('pym_note','');sv('pym_mode','NEFT');
-    try{sv('pym_tds_amt','0');var _tp=document.getElementById('pym_tds_preview');if(_tp)_tp.style.display='none';}catch(_e){}
+    try{sv('pym_tds_amt','0');sv('pym_tds_ref','');var _ts=document.getElementById('pym_tds_status');if(_ts)_ts.value='pending';var _tp=document.getElementById('pym_tds_preview');if(_tp)_tp.style.display='none';var _td=document.getElementById('pym_tds_date');if(_td)_td.value='';}catch(_e){}
     sc('pym_chkRent',true);sc('pym_chkMaint',false);sc('pym_chkOther',false);
     // Init date picker — rebuild every time modal opens so date is fresh
     const _pdw = document.getElementById('pym_date_wrap');
@@ -514,7 +436,7 @@ Object.assign(APP, {
     svDate('pym_date',p.date);
     sv('pym_ref',p.ref||'');
     sv('pym_note',p.note||'');
-    try{sv('pym_tds_amt',p.tdsAmt||'0');}catch(_e){}
+    try{sv('pym_tds_amt',p.tdsAmt||'0');sv('pym_tds_ref',p.tdsRef||'');var _ts2=document.getElementById('pym_tds_status');if(_ts2)_ts2.value=p.tdsStatus||'pending';var _td2=document.getElementById('pym_tds_date');if(_td2)_td2.value=p.tdsDate||p.date||'';}catch(_e){}
     sc('pym_chkRent',p.incRent!==false);
     sc('pym_chkMaint',!!p.incMaint);
     sc('pym_chkOther',false);
@@ -629,14 +551,14 @@ Object.assign(APP, {
 
       let ps = [...this.payments];
 
-      const bankAmt  = parseFloat((v('pym_amt')||'').replace(/,/g,''))||0;
       const tdsAmt   = parseFloat((v('pym_tds_amt')||'').replace(/,/g,''))||0;
-      const grossAmt = bankAmt + tdsAmt;
+      const tdsDate  = vDate('pym_tds_date') || date;
+      const tdsRef   = v('pym_tds_ref') || '';
+      const tdsStatus= (document.getElementById('pym_tds_status')||{}).value || 'pending';
       const payData = {
-        amount:    Number(bankAmt),
-        bankAmt:   Number(bankAmt),
-        grossAmt:  Number(grossAmt),
-        tdsAmt,
+        amount:    Number(amt),
+        bankAmt:   Number(amt),
+        tdsAmt, tdsDate, tdsRef, tdsStatus,
         date, rentForMonth,
         mode: v('pym_mode') || 'NEFT',
         ref:  v('pym_ref') || '',
@@ -668,7 +590,7 @@ Object.assign(APP, {
         };
         ps.push(newEntry);
         console.log('[savePayment] new entry saved:', JSON.stringify(newEntry));
-        this.showToastMsg(ptype==='refund' ? '↩️ Refund recorded!' : '💰 Payment of ₹'+Number(bankAmt).toLocaleString('en-IN')+' saved!');
+        this.showToastMsg(ptype==='refund' ? '↩️ Refund recorded!' : '💰 Payment of ₹'+Number(amt).toLocaleString('en-IN')+' saved!');
       }
 
       // Persist to localStorage + Firebase
@@ -761,23 +683,22 @@ Object.assign(APP, {
           <div class="field"><label>Tenant Name</label><span>${t.name}</span></div>
           <div class="field"><label>Rent Period</label><span>${rentPeriod}</span></div>
           <div class="field"><label>Payment Date</label><span>${fD(p.date)}</span></div>
-          <div class="field"><label>Payment Mode</label><span>${p.mode||'Cash'}</span></div>
+          <div class="field"><label>Payment Mode <span style="color:var(--mut);font-size:.65rem;">(optional)</span></label><span>${p.mode||'Cash'}</span></div>
           ${p.ref?`<div class="field"><label>Reference / UTR</label><span style="font-family:monospace;">${p.ref}</span></div>`:''}
           ${t.ph?`<div class="field"><label>Tenant Phone</label><span>${t.ph}</span></div>`:''}
         </div>
       </div>
 
       <div class="amount-box">
-        <div class="amount-label">Total Rent Credited</div>
-        <div class="amount-value">₹${Number((p.bankAmt||p.amount||0)+(p.tdsAmt||0)).toLocaleString('en-IN')}</div>
+        <div class="amount-label">Amount Received</div>
+        <div class="amount-value">₹${Number(p.amount).toLocaleString('en-IN')}</div>
         <div class="amount-words">${(function(){
-          const n=Math.floor(Number((p.bankAmt||p.amount||0)+(p.tdsAmt||0)));
+          const n=Math.floor(Number(p.amount));
           const ones=['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen'];
           const tens=['','','Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety'];
           const convert=n=>{if(n<20)return ones[n];if(n<100)return tens[Math.floor(n/10)]+(n%10?' '+ones[n%10]:'');if(n<1000)return ones[Math.floor(n/100)]+' Hundred'+(n%100?' '+convert(n%100):'');if(n<100000)return convert(Math.floor(n/1000))+' Thousand'+(n%1000?' '+convert(n%1000):'');if(n<10000000)return convert(Math.floor(n/100000))+' Lakh'+(n%100000?' '+convert(n%100000):'');return convert(Math.floor(n/10000000))+' Crore'+(n%10000000?' '+convert(n%10000000):'');};
           return convert(n)+' Rupees Only';
         })()}</div>
-        ${Number(p.tdsAmt||0)>0?`<div style="margin-top:8px;font-size:12px;color:#5b6478;">In Bank: <b>${fmt(Number(p.bankAmt||p.amount||0))}</b> · TDS Deducted: <b>${fmt(Number(p.tdsAmt||0))}</b></div>`:''}
       </div>
 
       ${p.note?`<div style="background:#fff8ee;border:1px solid #ffe0b2;border-radius:6px;padding:10px 14px;font-size:13px;color:#7a4400;margin-bottom:16px;"><b>Note:</b> ${p.note}</div>`:''}
@@ -826,7 +747,7 @@ Object.assign(APP, {
       if(!prev) return;
       if(tds>0){
         prev.style.display='block';
-        prev.innerHTML='In Bank: ₹'+bank.toLocaleString('en-IN')+' + TDS Deducted: ₹'+tds.toLocaleString('en-IN')+' = Total Rent Credited: ₹'+(bank+tds).toLocaleString('en-IN');
+        prev.innerHTML='Bank: ₹'+bank.toLocaleString('en-IN')+' + TDS: ₹'+tds.toLocaleString('en-IN')+' = Total: ₹'+(bank+tds).toLocaleString('en-IN');
       } else { prev.style.display='none'; }
     }catch(_e){}
   },
@@ -1079,7 +1000,7 @@ Object.assign(APP, {
 
     if(s==='overview'){
       // Summary using full ledger engine
-      let totExp=0,totRec=0,totBal=0,totBank=0,totTds=0;
+      let totExp=0,totRec=0,totBal=0;
 
       // ── Loan outstanding rows ──
       // Loans removed — use Khata Book tab
@@ -1131,7 +1052,7 @@ Object.assign(APP, {
       const rows=this.tenants.filter(t=>t.status==='active').map(t=>{
         const prop=this.props.find(p=>p.id===t.propId);
         const ledger=this.getTenantLedger(t);
-        totExp+=ledger.totalExpected; totRec+=ledger.totalReceived; totBal+=ledger.totalBalance; totBank+=ledger.totalBank||0; totTds+=ledger.totalTds||0;
+        totExp+=ledger.totalExpected; totRec+=ledger.totalReceived; totBal+=ledger.totalBalance;
         const curMo=ledger.months.find(mo=>mo.year===y&&mo.month===m);
         const curRec=curMo?curMo.received:0;
         // Only show current month balance if it's been invoiced (not upcoming)
@@ -1254,25 +1175,13 @@ Object.assign(APP, {
             <div class="rent-overview-kpi-value">${fmt(totExp)}</div>
           </div>
           <div class="rent-overview-kpi is-green">
-            <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;align-items:stretch;height:100%;">
-              <div style="background:rgba(255,255,255,.72);border:1px solid rgba(34,197,94,.18);border-radius:12px;padding:10px 12px;">
-                <div style="font-size:.68rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);margin-bottom:4px;">Total Received</div>
-                <div style="font-size:1rem;font-weight:800;color:var(--grn);font-family:'JetBrains Mono',monospace;">${fmt(totRec)}</div>
-              </div>
-              <div style="background:rgba(255,255,255,.72);border:1px solid rgba(34,197,94,.18);border-radius:12px;padding:10px 12px;">
-                <div style="font-size:.68rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);margin-bottom:4px;">In Bank</div>
-                <div style="font-size:1rem;font-weight:800;color:var(--grn);font-family:'JetBrains Mono',monospace;">${fmt(totBank)}</div>
-              </div>
-              <div style="background:rgba(255,255,255,.72);border:1px solid rgba(124,58,237,.16);border-radius:12px;padding:10px 12px;">
-                <div style="font-size:.68rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);margin-bottom:4px;">TDS</div>
-                <div style="font-size:1rem;font-weight:800;color:#7c3aed;font-family:'JetBrains Mono',monospace;">${fmt(totTds)}</div>
-              </div>
-            </div>
+            <div class="rent-overview-kpi-label">Total Received</div>
+            <div class="rent-overview-kpi-value">${fmt(totRec)}</div>
           </div>
           <div class="rent-overview-kpi ${totBal>0?'is-red':'is-green'}">
             <div class="rent-overview-kpi-label">Total Outstanding</div>
             <div class="rent-overview-kpi-value">${totBal>0?fmt(totBal):'✅ Clear'}</div>
-            <div class="rent-overview-kpi-copy">Rent only</div>
+            <div class="rent-overview-kpi-copy">Rent + Loans</div>
           </div>
         </div>
         ${rows?`<div class="rent-overview-heading">🏠 Rent Outstanding</div>`:''}
@@ -1338,21 +1247,14 @@ Object.assign(APP, {
       const fyOpts    = [curY,curY-1,curY-2].map(y=>`<option value="fy_${y}">FY ${y}-${String(y+1).slice(2)} (Apr–Mar)</option>`).join('');
 
       const filterBar = `
-        <div class="date-filter-panel">
-          <div class="date-filter-bar">
-            <div class="date-filter-bar__tools">
-              ${renderCompactDateRangeFilter({
-                label:'Date',
-                fromId:'dfh_rlf',
-                toId:'dfh_rlt',
-                fromValue:this._ledgerCustomFrom||'',
-                toValue:this._ledgerCustomTo||'',
-                fromOnChange:"APP._ledgerFilter='custom';APP._ledgerCustomFrom=this.value;APP.renderRent()",
-                toOnChange:"APP._ledgerFilter='custom';APP._ledgerCustomTo=this.value;APP.renderRent()",
-                clearOnClick:"APP._ledgerFilter='all';APP._ledgerCustomFrom='';APP._ledgerCustomTo='';APP.renderRent()",
-                className:'date-filter-inline--tight'
-              })}
-            </div>
+        <div style="background:var(--card2);border:1px solid var(--bdr);border-radius:10px;padding:10px 14px;margin-bottom:12px;">
+          <div style="font-size:.72rem;font-weight:800;color:var(--mut);margin-bottom:7px;">📅 Filter by Date Range</div>
+          <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;">
+            <span style="font-size:.72rem;color:var(--mut);font-weight:600;">From</span>
+            <span style="position:relative;display:inline-flex;align-items:center;"><input type="text" id="df_rlf" value="${this._ledgerCustomFrom||''?isoToDmy(this._ledgerCustomFrom||''):''}" placeholder="DD/MM/YYYY" oninput="(function(el){var iso=dmyToIso(el.value);var h=document.getElementById('dfh_rlf');if(iso){if(h)h.value=iso;el.style.borderColor='var(--acc)';APP._ledgerFilter='custom';APP._ledgerCustomFrom=iso;APP.renderRent();}else{el.style.borderColor=el.value?'var(--red)':'var(--bdr2)';}})(this)" style="font-family:'JetBrains Mono',monospace;font-size:.72rem;padding:3px 26px 3px 7px;border:1.5px solid var(--bdr2);border-radius:6px;background:var(--bg);color:var(--txt);width:108px;outline:none;letter-spacing:.02em;"><span onclick="document.getElementById('dfh_rlf').showPicker&&document.getElementById('dfh_rlf').showPicker()" style="position:absolute;right:4px;cursor:pointer;font-size:.78rem;opacity:.65;user-select:none;">📅</span><input type="date" id="dfh_rlf" value="${this._ledgerCustomFrom||''||''} " onchange="(function(iso){var el=document.getElementById('df_rlf');if(el){el.value=iso?isoToDmy(iso):'';el.style.borderColor=iso?'var(--acc)':'var(--bdr2)';}  APP._ledgerFilter='custom';APP._ledgerCustomFrom=iso;APP.renderRent();})(this.value)" style="position:absolute;opacity:0;width:1px;height:1px;pointer-events:none;"></span>
+            <span style="font-size:.72rem;color:var(--mut);font-weight:600;">To</span>
+            <span style="position:relative;display:inline-flex;align-items:center;"><input type="text" id="df_rlt" value="${this._ledgerCustomTo||''?isoToDmy(this._ledgerCustomTo||''):''}" placeholder="DD/MM/YYYY" oninput="(function(el){var iso=dmyToIso(el.value);var h=document.getElementById('dfh_rlt');if(iso){if(h)h.value=iso;el.style.borderColor='var(--acc)';APP._ledgerFilter='custom';APP._ledgerCustomTo=iso;APP.renderRent();}else{el.style.borderColor=el.value?'var(--red)':'var(--bdr2)';}})(this)" style="font-family:'JetBrains Mono',monospace;font-size:.72rem;padding:3px 26px 3px 7px;border:1.5px solid var(--bdr2);border-radius:6px;background:var(--bg);color:var(--txt);width:108px;outline:none;letter-spacing:.02em;"><span onclick="document.getElementById('dfh_rlt').showPicker&&document.getElementById('dfh_rlt').showPicker()" style="position:absolute;right:4px;cursor:pointer;font-size:.78rem;opacity:.65;user-select:none;">📅</span><input type="date" id="dfh_rlt" value="${this._ledgerCustomTo||''||''} " onchange="(function(iso){var el=document.getElementById('df_rlt');if(el){el.value=iso?isoToDmy(iso):'';el.style.borderColor=iso?'var(--acc)':'var(--bdr2)';}  APP._ledgerFilter='custom';APP._ledgerCustomTo=iso;APP.renderRent();})(this.value)" style="position:absolute;opacity:0;width:1px;height:1px;pointer-events:none;"></span>
+            ${(this._ledgerCustomFrom||this._ledgerCustomTo)?'<button onclick="APP._ledgerFilter=\'all\';APP._ledgerCustomFrom=\'\';APP._ledgerCustomTo=\'\';APP.renderRent();" class="btn b-sm b-out" style="font-size:.65rem;padding:2px 7px;">✕ Clear</button>':''}
           </div>
         </div>`;
 
@@ -1393,8 +1295,8 @@ Object.assign(APP, {
           .sort((a,b)=>(b.date||'').localeCompare(a.date||''));
 
         // Summary stats
-        const totalPay = allPays.filter(p=>p.ptype!=='refund').reduce((s,p)=>s+Number(p.bankAmt||p.amount||0)+Number(p.tdsAmt||0),0);
-        const totalRef = allPays.filter(p=>p.ptype==='refund').reduce((s,p)=>s+Number(p.bankAmt||p.amount||0),0);
+        const totalPay = allPays.filter(p=>p.ptype!=='refund').reduce((s,p)=>s+Number(p.amount),0);
+        const totalRef = allPays.filter(p=>p.ptype==='refund').reduce((s,p)=>s+Number(p.amount),0);
         const netAmt   = totalPay - totalRef;
 
         const summaryBar = `
@@ -1430,8 +1332,7 @@ Object.assign(APP, {
                 title="Click to open ${ten?ten.name:''} ledger">${ten?ten.name:'—'}</span></td>
             <td style="font-size:.72rem;color:var(--mut);">${prop?prop.name:'—'}</td>
             <td><span style="font-size:.7rem;background:${isRef?'#fff0f0':'#f0fdf4'};color:${col};padding:1px 7px;border-radius:8px;font-weight:700;">${isRef?'↩️ Refund':'💰 Payment'}</span></td>
-            <td class="mono tr" style="color:${col};font-weight:700;">${sign}${fmt(Number(p.bankAmt||p.amount||0))}</td>
-            <td class="mono tr" style="color:#7c3aed;font-weight:700;">${Number(p.tdsAmt||0)>0?fmt(Number(p.tdsAmt||0)):'—'}</td>
+            <td class="mono tr" style="color:${col};font-weight:700;">${sign}${fmt(p.amount)}</td>
             <td style="font-size:.72rem;color:var(--mut);">${p.mode||'—'}${p.note?' · '+p.note.slice(0,25):''}</td>
             <td><button class="btn b-out b-sm" style="font-size:.62rem;padding:2px 7px;" onclick="APP.openEditPayModal('${p.id}')">✏️</button></td>
           </tr>`;
@@ -1452,8 +1353,8 @@ Object.assign(APP, {
             <div class="card-body">${summaryBar}</div>
           </div>
           <div class="tbl-wrap"><table>
-            <thead><tr><th>Date</th><th>Tenant</th><th>Property</th><th>Type</th><th class="tr">In Bank</th><th class="tr">TDS Deducted</th><th>Details</th><th>Edit</th></tr></thead>
-            <tbody>${rows||'<tr><td colspan="8"><div class="empty">No transactions found</div></td></tr>'}</tbody>
+            <thead><tr><th>Date</th><th>Tenant</th><th>Property</th><th>Type</th><th class="tr">Amount</th><th>Details</th><th>Edit</th></tr></thead>
+            <tbody>${rows||'<tr><td colspan="7"><div class="empty">No transactions found</div></td></tr>'}</tbody>
           </table></div>`;
 
       } else {
@@ -1496,8 +1397,7 @@ Object.assign(APP, {
               <td class="mono" style="font-size:.72rem;color:var(--mut);">${fmt2(mo.invoiceDate)}<br><span style="font-size:.58rem">Invoice</span></td>
               <td class="mono" style="font-size:.72rem;color:var(--mut);">${fmt2(mo.dueDate)}<br><span style="font-size:.58rem">Due</span></td>
               <td class="mono" style="font-weight:700;">${mo.charged?fmt(mo.monthlyTotal):'<span style="color:var(--mut)">—</span>'}</td>
-              <td class="mono" style="font-size:.72rem;">${mo.bankReceived?'<div style="color:var(--grn);font-weight:700;">'+fmt(mo.bankReceived)+'</div>':'<span style="color:var(--mut)">—</span>'}</td>
-              <td class="mono" style="font-size:.72rem;">${mo.tdsReceived?'<div style="color:#7c3aed;font-weight:700;">'+fmt(mo.tdsReceived)+'</div>':'<span style="color:var(--mut)">—</span>'}</td>
+              <td class="mono" style="font-size:.72rem;">${(function(){var b=mo.bankReceived||0,t=mo.tdsReceived||0;return (b>0?'<div style="color:var(--grn);font-weight:700;">Bank '+fmt(b)+'</div>':'')+(t>0?'<div style="color:#7c3aed;font-weight:700;">TDS '+fmt(t)+'</div>':'')+(b+t===0?'<span style="color:var(--mut)">—</span>':'');})()}</td>
               <td class="mono" style="font-weight:700;color:${mo.runningBalance>0?'var(--red)':'var(--grn)'};">
                 ${mo.charged?(mo.runningBalance>0?fmt(mo.runningBalance):'<span style="color:var(--grn)">✓</span>'):'<span style="color:var(--mut)">—</span>'}
               </td>
@@ -1511,7 +1411,7 @@ Object.assign(APP, {
             // Individual payment rows — one per payment entry
             if(mo.payments.length===0 && mo.charged){
               allPayRows.push(`<tr style="${mRowBg}">
-                <td colspan="9" style="padding:4px 14px;font-size:.72rem;color:var(--mut);font-style:italic;">No payments recorded for this month</td>
+                <td colspan="8" style="padding:4px 14px;font-size:.72rem;color:var(--mut);font-style:italic;">No payments recorded for this month</td>
               </tr>`);
             }
             mo.payments.forEach(p=>{
@@ -1532,8 +1432,7 @@ Object.assign(APP, {
                 <td class="mono" style="font-size:.72rem;">${payDate}<br><span style="font-size:.58rem;color:var(--mut);">Pay Date</span></td>
                 <td class="mono" style="font-size:.72rem;color:var(--mut);">${mLabel}<br><span style="font-size:.58rem;">Rent Month</span></td>
                 <td></td>
-                <td class="mono" style="font-size:.72rem;">${(function(){var b=Number(p.bankAmt||p.amount);return isRef?'<div style="color:var(--red);font-weight:700">− '+fmt(b)+'</div>':'<div style="color:var(--grn);font-weight:700">'+fmt(b)+'</div>';})()}</td>
-                <td class="mono" style="font-size:.72rem;">${(function(){var t=Number(p.tdsAmt||0);return t>0?'<div style="color:#7c3aed;font-weight:700">'+fmt(t)+'</div>':'<span style="color:var(--mut)">—</span>';})()}</td>
+                <td class="mono" style="font-size:.72rem;">${(function(){var b=Number(p.bankAmt||p.amount),t=Number(p.tdsAmt||0),st=p.tdsStatus==='verified'?'TDS✓':'TDS⏳';return isRef?'<div style="color:var(--red);font-weight:700">− '+fmt(b)+'</div>':('<div style="color:var(--grn);font-weight:700">Bank '+fmt(b)+'</div>'+(t>0?'<div style="color:#7c3aed;font-weight:700">'+st+' '+fmt(t)+'</div>':''));})()}</td>
                 <td style="font-size:.72rem;color:var(--mut);">${p.mode||'NEFT'}${p.ref?' · '+p.ref.slice(0,12):''}${p.note?'<br><span style="font-size:.65rem;">'+p.note.slice(0,25)+'</span>':''}</td>
                 <td>${timingBadge}</td>
                 <td style="white-space:nowrap;"><button onclick="APP.openEditPayModal('${p.id}')" style="background:none;border:1px solid var(--bdr2);color:var(--mut);cursor:pointer;font-size:.7rem;padding:2px 6px;border-radius:5px;">✏️</button>${!isRef?`<button onclick="APP.generateReceipt('${p.id}')" style="background:#e8f5e9;color:#1a7a45;border:1.5px solid #90c8a0;cursor:pointer;font-size:.68rem;padding:2px 6px;border-radius:5px;margin-left:3px;font-weight:700;" title="Generate Receipt">🧾</button>`:''}</td>
@@ -1571,8 +1470,8 @@ Object.assign(APP, {
               </div>
             </div>
             <div class="tbl-wrap"><table>
-              <thead><tr><th>Month / Entry</th><th>Invoice Date</th><th>Rent Month / Pay Date</th><th>Charged</th><th>In Bank</th><th>TDS</th><th>Balance / Mode</th><th>Status</th><th>Action</th></tr></thead>
-              <tbody>${allPayRows.join('')||'<tr><td colspan="9"><div class="empty">No data in range</div></td></tr>'}</tbody>
+              <thead><tr><th>Month / Entry</th><th>Invoice Date</th><th>Rent Month / Pay Date</th><th>Charged</th><th>Bank / TDS</th><th>Mode / Note</th><th>Status</th><th>Action</th></tr></thead>
+              <tbody>${allPayRows.join('')||'<tr><td colspan="8"><div class="empty">No data in range</div></td></tr>'}</tbody>
             </table></div>`;
         }
       }
@@ -1584,45 +1483,35 @@ Object.assign(APP, {
       let histPays=[...this.payments].sort((a,b)=>(b.date||'').localeCompare(a.date||''));
       if(histFrom) histPays=histPays.filter(p=>p.date&&p.date>=histFrom);
       if(histTo)   histPays=histPays.filter(p=>p.date&&p.date<=histTo);
-      const histTotal=histPays.filter(p=>p.ptype!=='refund').reduce((s,p)=>s+Number(p.bankAmt||p.amount)+Number(p.tdsAmt||0),0);
+      const histTotal=histPays.filter(p=>p.ptype!=='refund').reduce((s,p)=>s+Number(p.amount),0);
       const rows=histPays.map(p=>{
         const t=this.tenants.find(x=>x.id===p.tenantId);
         const prop=t&&this.props.find(x=>x.id===t.propId);
-        const bankAmt = Number(p.bankAmt||p.amount||0);
-        const tdsAmt = Number(p.tdsAmt||0);
         return`<tr>
           <td class="mono">${fD(p.date)}</td>
           <td>${prop?prop.name:'—'}</td>
           <td>${t?t.name:'—'}</td>
-          <td class="mono tr" style="color:${p.ptype==='refund'?'var(--red)':'var(--grn)'};font-weight:700">${p.ptype==='refund'?'− ':''}${fmt(bankAmt)}</td>
-          <td class="mono tr" style="color:#7c3aed;font-weight:700">${tdsAmt>0?fmt(tdsAmt):'—'}</td>
+          <td class="mono tr" style="color:var(--grn);font-weight:700">${fmt(p.amount)}</td>
           <td>${p.mode||'—'}</td>
           <td style="font-size:.76rem">${p.ref||p.note||'—'}</td>
           <td><button class="btn b-out b-sm" onclick="APP.openEditPayModal('${p.id}')">✏️ Edit / Delete</button></td>
         </tr>`;
       }).join('');
       html=`
-        <div class="date-filter-panel">
-          <div class="date-filter-bar">
-            <div class="date-filter-bar__tools">
-              ${renderCompactDateRangeFilter({
-                label:'Date',
-                fromId:'dfh_rhf',
-                toId:'dfh_rht',
-                fromValue:histFrom,
-                toValue:histTo,
-                fromOnChange:"APP._histFrom=this.value;APP.renderRent()",
-                toOnChange:"APP._histTo=this.value;APP.renderRent()",
-                clearOnClick:"APP._histFrom='';APP._histTo='';APP.renderRent()",
-                meta:`${histPays.length} entries · ${fmt(histTotal)}`,
-                className:'date-filter-inline--tight'
-              })}
-            </div>
+        <div style="background:var(--card2);border:1px solid var(--bdr);border-radius:10px;padding:10px 14px;margin-bottom:12px;">
+          <div style="font-size:.72rem;font-weight:800;color:var(--mut);margin-bottom:7px;">📅 Filter by Date Range</div>
+          <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;">
+            <span style="font-size:.72rem;color:var(--mut);font-weight:600;">From</span>
+            <span style="position:relative;display:inline-flex;align-items:center;"><input type="text" id="df_rhf" value="${histFrom?isoToDmy(histFrom):''}" placeholder="DD/MM/YYYY" oninput="(function(el){var iso=dmyToIso(el.value);var h=document.getElementById('dfh_rhf');if(iso){if(h)h.value=iso;el.style.borderColor='var(--acc)';APP._histFrom=iso;APP.renderRent();}else{el.style.borderColor=el.value?'var(--red)':'var(--bdr2)';}})(this)" style="font-family:'JetBrains Mono',monospace;font-size:.72rem;padding:3px 26px 3px 7px;border:1.5px solid var(--bdr2);border-radius:6px;background:var(--bg);color:var(--txt);width:108px;outline:none;letter-spacing:.02em;"><span onclick="document.getElementById('dfh_rhf').showPicker&&document.getElementById('dfh_rhf').showPicker()" style="position:absolute;right:4px;cursor:pointer;font-size:.78rem;opacity:.65;user-select:none;">📅</span><input type="date" id="dfh_rhf" value="${histFrom||''} " onchange="(function(iso){var el=document.getElementById('df_rhf');if(el){el.value=iso?isoToDmy(iso):'';el.style.borderColor=iso?'var(--acc)':'var(--bdr2)';}  APP._histFrom=iso;APP.renderRent();})(this.value)" style="position:absolute;opacity:0;width:1px;height:1px;pointer-events:none;"></span>
+            <span style="font-size:.72rem;color:var(--mut);font-weight:600;">To</span>
+            <span style="position:relative;display:inline-flex;align-items:center;"><input type="text" id="df_rht" value="${histTo?isoToDmy(histTo):''}" placeholder="DD/MM/YYYY" oninput="(function(el){var iso=dmyToIso(el.value);var h=document.getElementById('dfh_rht');if(iso){if(h)h.value=iso;el.style.borderColor='var(--acc)';APP._histTo=iso;APP.renderRent();}else{el.style.borderColor=el.value?'var(--red)':'var(--bdr2)';}})(this)" style="font-family:'JetBrains Mono',monospace;font-size:.72rem;padding:3px 26px 3px 7px;border:1.5px solid var(--bdr2);border-radius:6px;background:var(--bg);color:var(--txt);width:108px;outline:none;letter-spacing:.02em;"><span onclick="document.getElementById('dfh_rht').showPicker&&document.getElementById('dfh_rht').showPicker()" style="position:absolute;right:4px;cursor:pointer;font-size:.78rem;opacity:.65;user-select:none;">📅</span><input type="date" id="dfh_rht" value="${histTo||''} " onchange="(function(iso){var el=document.getElementById('df_rht');if(el){el.value=iso?isoToDmy(iso):'';el.style.borderColor=iso?'var(--acc)':'var(--bdr2)';}  APP._histTo=iso;APP.renderRent();})(this.value)" style="position:absolute;opacity:0;width:1px;height:1px;pointer-events:none;"></span>
+            ${histFrom||histTo?'<button onclick="APP._histFrom=\'\';APP._histTo=\'\';APP.renderRent();" class="btn b-sm b-out" style="font-size:.65rem;padding:2px 7px;">✕ Clear</button>':''}
+            <span style="font-size:.68rem;color:var(--acc);font-weight:700;margin-left:4px;">${histPays.length} entries · ${fmt(histTotal)}</span>
           </div>
         </div>
         <div class="sec-hdr"><div class="sec-title">Payments <span class="ct">${histPays.length}</span></div></div>
-        <div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Property</th><th>Tenant</th><th class="tr">In Bank</th><th class="tr">TDS Deducted</th><th>Mode</th><th>Note</th><th></th></tr></thead>
-        <tbody>${rows||'<tr><td colspan="8"><div class="empty">No payments for selected range</div></td></tr>'}</tbody></table></div>`;
+        <div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Property</th><th>Tenant</th><th class="tr">Amount</th><th>Mode</th><th>Note</th><th></th></tr></thead>
+        <tbody>${rows||'<tr><td colspan="7"><div class="empty">No payments for selected range</div></td></tr>'}</tbody></table></div>`;
     }
 
     if(s==='templates'){

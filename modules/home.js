@@ -7,15 +7,18 @@
 'use strict';
 
 const APP = {
-  curTab:'home',curPerson:'Raman',curProp:null,curPatient:'all',medFilter30:false,
+  curTab:'home',curProp:null,curPatient:'all',medFilter30:false,
   rentSub:'overview',travelSub:'upcoming',
   editId:null,payTId:null,payEditId:null,delCb:null,
   calY:new Date().getFullYear(),calM:new Date().getMonth(),
-  _impBuf:null,viewLedgerTid:null,
+  viewLedgerTid:null,
+  _tabIds:['home','property','rent','expense','khata','reminder','medical','travel','calendar','todo','notepad','search'],
+  _routeBound:false,
+  _routeApplying:false,
+  _busyActions:{},
   _ledgerCache:{}, // Bug5 fix: cache getTenantLedger results per render cycle
   _pdfOrientation:'portrait', // Global PDF orientation: 'portrait' | 'landscape'
 
-  get persons(){return S.obj('persons',['Raman']);},
   get props(){return S.get('props');},
   get tenants(){return S.get('tenants');},
   get payments(){return S.get('payments');},
@@ -29,14 +32,282 @@ const APP = {
   set finAccounts(d){localStorage.setItem('rk_fin_accounts',JSON.stringify(d));if(window.fbSave)window.fbSave('fin_accounts',d).catch(()=>{});},
   get finBudgets(){try{return JSON.parse(localStorage.getItem('rk_fin_budgets')||'[]');}catch{return[];}},
   set finBudgets(d){localStorage.setItem('rk_fin_budgets',JSON.stringify(d));if(window.fbSave)window.fbSave('fin_budgets',d).catch(()=>{});},
+  get kbParties(){
+    const next=S.get('kbParties');
+    if(Array.isArray(next) && next.length) return next;
+    const legacy=S.get('kb_parties');
+    return Array.isArray(legacy)?legacy:[];
+  },
+  set kbParties(d){S.set('kbParties',d);},
+  get kbEntries(){
+    const next=S.get('kbEntries');
+    if(Array.isArray(next) && next.length) return next;
+    const legacy=S.get('kb_entries');
+    return Array.isArray(legacy)?legacy:[];
+  },
+  set kbEntries(d){S.set('kbEntries',d);},
+  get kbCash(){
+    const next=S.get('kbCash');
+    if(Array.isArray(next) && next.length) return next;
+    const legacy=S.get('kb_cash');
+    return Array.isArray(legacy)?legacy:[];
+  },
+  set kbCash(d){S.set('kbCash',d);},
+
+  _syncShellState(tab){
+    try{
+      const nextTab=tab || this.curTab || 'home';
+      const isHome=nextTab==='home';
+      document.body.setAttribute('data-tab', nextTab);
+      document.querySelectorAll('.dashboard-shell').forEach(function(el){
+        if(!el.dataset.shellDisplay) el.dataset.shellDisplay=el.style.display||'';
+        el.style.display=isHome ? el.dataset.shellDisplay : 'none';
+      });
+    }catch(e){}
+  },
 
   init(){
+    this._migrateReminderBeforeData();
+    this._migrateKhataStorage();
+    this._purgeDiaryModuleData();
+    this._bindRouteState();
+    const route=this._getRouteInfo();
+    const startTab=this._isValidTab(route.tab)?route.tab:(this.curTab||'home');
+    this._applyRouteContext(startTab, route.params);
+    this.curTab=startTab;
+    this._syncShellState(startTab);
+    this._syncRouteState(startTab, true);
     document.getElementById('hdrDate').textContent=new Date().toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short',year:'numeric'});
-    this.refreshPersons();
-    this.renderPills();
-    this.renderTab('home');
+    try{ this.renderPills(); }catch(e){ console.error('[APP] renderPills failed during init:', e); }
+    try{ this.goTab(startTab, { skipHistory:true }); }
+    catch(e){
+      console.error('[APP] Initial tab render failed:', e);
+      if(startTab === 'home') this.ensureHomeRendered(8);
+    }
     this.injectDateWidgets();
+    this._bindCoreModalActions();
     this._wirePaymentModal();
+    try{ if(typeof normalizeRequiredLabels === 'function') normalizeRequiredLabels(document); }catch(e){}
+    this.ensureHomeRendered(8);
+  },
+
+  _runGuardedAction(key, fn, holdMs){
+    if(this._busyActions[key]) return false;
+    this._busyActions[key] = true;
+    let released = false;
+    const release = ()=>{
+      if(released) return;
+      released = true;
+      delete this._busyActions[key];
+    };
+    const timer = setTimeout(release, holdMs || 1200);
+    const releaseNow = ()=>{
+      clearTimeout(timer);
+      release();
+    };
+    try{
+      return fn(releaseNow);
+    }catch(e){
+      releaseNow();
+      throw e;
+    }
+  },
+
+  _bindCoreModalActions(){
+    if(this._coreModalActionsBound) return;
+    this._coreModalActionsBound = true;
+    const handleAction = (e)=>{
+      const btn = e.target && e.target.closest ? e.target.closest('[data-app-action]') : null;
+      if(!btn) return;
+      const action = btn.dataset.appAction;
+      if(!action || typeof this[action] !== 'function') return;
+      const now = Date.now();
+      if(btn._lastActionTs && (now - btn._lastActionTs) < 420){
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+      btn._lastActionTs = now;
+      e.preventDefault();
+      e.stopPropagation();
+      this[action]();
+    };
+    document.addEventListener('pointerup', handleAction, true);
+    document.addEventListener('click', handleAction, true);
+  },
+
+  _isValidTab(tab){
+    return this._tabIds.indexOf(tab)>=0;
+  },
+
+  _getRouteInfo(){
+    try{
+      const raw=(window.location.hash||'').replace(/^#/,'').trim();
+      if(!raw) return { tab:null, params:new URLSearchParams() };
+      const qIdx=raw.indexOf('?');
+      const path=qIdx>=0 ? raw.slice(0,qIdx) : raw;
+      const query=qIdx>=0 ? raw.slice(qIdx+1) : '';
+      const tab=path.split('/')[0];
+      return {
+        tab:this._isValidTab(tab)?tab:null,
+        params:new URLSearchParams(query)
+      };
+    }catch(e){
+      return { tab:null, params:new URLSearchParams() };
+    }
+  },
+
+  _buildRouteHash(tab){
+    const params=new URLSearchParams();
+    if(tab==='expense' && this.finSub && this.finSub!=='overview') params.set('sub', this.finSub);
+    if(tab==='rent' && this.rentSub && this.rentSub!=='overview') params.set('sub', this.rentSub);
+    if(tab==='property' && this.curProp && this.curProp!=='__all__') params.set('prop', this.curProp);
+    if(tab==='travel' && this.travelSub && this.travelSub!=='upcoming') params.set('sub', this.travelSub);
+    if(tab==='medical' && this.medFilter30) params.set('filter', '30');
+    const query=params.toString();
+    return '#'+tab+(query?('?'+query):'');
+  },
+
+  _syncRouteState(tab, replace){
+    if(this._routeApplying) return;
+    try{
+      const target=this._buildRouteHash(tab);
+      if(window.location.hash===target) return;
+      const fn=replace?'replaceState':'pushState';
+      if(window.history && typeof window.history[fn]==='function'){
+        window.history[fn]({tab:tab},'',target);
+      }else{
+        window.location.hash=target;
+      }
+    }catch(e){}
+  },
+
+  syncCurrentRoute(replace){
+    this._syncRouteState(this.curTab||'home', !!replace);
+  },
+
+  _applyRouteContext(tab, params){
+    if(tab==='expense'){
+      const sub=params.get('sub');
+      const allowed=['overview','accounts','txn','networth','budget','charts','reports'];
+      this.finSub=allowed.includes(sub)?sub:'overview';
+    }
+    if(tab==='rent'){
+      const sub=params.get('sub');
+      const allowed=['overview','tenants','ledger','history','templates'];
+      this.rentSub=allowed.includes(sub)?sub:'overview';
+    }
+    if(tab==='property'){
+      const prop=params.get('prop');
+      this.curProp=prop||'__all__';
+    }
+    if(tab==='travel'){
+      const sub=params.get('sub');
+      const allowed=['upcoming','past','bucket'];
+      this.travelSub=allowed.includes(sub)?sub:'upcoming';
+    }
+    if(tab==='medical'){
+      this.medFilter30=params.get('filter')==='30';
+    }
+  },
+
+  _applyRouteState(){
+    const route=this._getRouteInfo();
+    const tab=route.tab;
+    if(!this._isValidTab(tab)) return;
+    this._routeApplying=true;
+    try{
+      this._applyRouteContext(tab, route.params);
+      this.goTab(tab, { skipHistory:true });
+    }finally{
+      this._routeApplying=false;
+    }
+  },
+
+  _bindRouteState(){
+    if(this._routeBound) return;
+    this._routeBound=true;
+    window.addEventListener('hashchange', ()=>this._applyRouteState());
+    window.addEventListener('popstate', ()=>this._applyRouteState());
+  },
+
+  _migrateReminderBeforeData(){
+    const reminders=S.get('reminders');
+    if(!Array.isArray(reminders)||!reminders.length) return;
+    let changed=false;
+    const migrated=reminders.map(r=>{
+      if(!r||typeof r!=='object') return r;
+      const next={...r};
+      const isRecurring=r.mode==='recurring';
+      const dueIso=r.dueDate||r.trigDate||r.exp||r.reminderDate||r.alertDate||'';
+      const triggerIso=isRecurring
+        ? (r.nextTrigger||r.start||r.reminderDate||r.alertDate||r.trigDate||'')
+        : (r.reminderDate||r.alertDate||r.trigDate||dueIso||'');
+
+      ['before','beforeDays','beforeLabel','recurBeforeVal','recurBeforeUnit'].forEach(function(key){
+        if(Object.prototype.hasOwnProperty.call(next,key)){
+          delete next[key];
+          changed=true;
+        }
+      });
+
+      if(!isRecurring){
+        if(dueIso && next.dueDate!==dueIso){ next.dueDate=dueIso; changed=true; }
+        if(dueIso && next.trigDate!==dueIso){ next.trigDate=dueIso; changed=true; }
+        if(dueIso && next.reminderDate!==dueIso){ next.reminderDate=dueIso; changed=true; }
+        if(dueIso && next.alertDate!==dueIso){ next.alertDate=dueIso; changed=true; }
+        if(dueIso && next.start!==dueIso){ next.start=dueIso; changed=true; }
+      } else {
+        if(triggerIso && next.reminderDate!==triggerIso){ next.reminderDate=triggerIso; changed=true; }
+        if(triggerIso && next.alertDate!==triggerIso){ next.alertDate=triggerIso; changed=true; }
+      }
+
+      return next;
+    });
+    if(changed) S.set('reminders',migrated);
+  },
+
+  _purgeDiaryModuleData(){
+    try{
+      localStorage.removeItem('rk_diary');
+      delete this.diaryEditId;
+      delete this.diaryQuery;
+      delete this._diaryExpanded;
+      delete this._diaryMoodFilter;
+      if(window.fbSave) window.fbSave('diary',[]).catch(()=>{});
+    }catch(e){}
+  },
+
+  _migrateKhataStorage(){
+    try{
+      const pairs=[
+        ['kb_parties','kbParties'],
+        ['kb_entries','kbEntries'],
+        ['kb_cash','kbCash']
+      ];
+      pairs.forEach(function(pair){
+        const legacyKey='rk_'+pair[0];
+        const nextKey='rk_'+pair[1];
+        const legacyRaw=localStorage.getItem(legacyKey);
+        const nextRaw=localStorage.getItem(nextKey);
+        if(nextRaw) return;
+        if(!legacyRaw) return;
+        localStorage.setItem(nextKey, legacyRaw);
+      });
+    }catch(e){}
+  },
+
+  ensureHomeRendered(tries){
+    tries = typeof tries === 'number' ? tries : 4;
+    setTimeout(()=>{
+      const home=document.getElementById('pan-home');
+      if(this.curTab==='home' && home && !home.innerHTML.trim()){
+        console.warn('[APP] Home was empty after startup; repainting dashboard.');
+        try{ this.renderPills(); }catch(e){ console.error('[APP] renderPills retry failed:', e); }
+        try{ this.renderHome(); }catch(e){ console.error('[APP] Home repaint failed:', e); }
+        if(tries>1) this.ensureHomeRendered(tries-1);
+      }
+    }, tries>6 ? 50 : 250);
   },
 
   // Wire Save Payment button via addEventListener (backup to inline onclick)
@@ -44,7 +315,7 @@ const APP = {
   _wirePaymentModal(){
     try {
       const btn = document.getElementById('pym_save_btn');
-      if(btn && !btn._wired){
+      if(btn && !btn._wired && !btn.dataset.appAction){
         btn._wired = true;
         btn.addEventListener('click', (e) => {
           e.preventDefault();
@@ -86,48 +357,44 @@ const APP = {
     });
   },
 
-  // PERSONS
-  refreshPersons(){
-    const ps=this.persons;
-    const sel=document.getElementById('personSel');
-    sel.innerHTML=ps.map(p=>`<option value="${p}">${p}</option>`).join('');
-    sel.value=this.curPerson;
-    ['rmm_person'].forEach(id=>{const el=document.getElementById(id);if(el)el.innerHTML=ps.map(p=>`<option>${p}</option>`).join('');});
-  },
-  addPerson(){
-    const n=v('pm_name');if(!n){alert('Enter name');return;}
-    const ps=this.persons;if(!ps.includes(n)){ps.push(n);S.set('persons',ps);}
-    sv('pm_name','');sv('pm_rel','');M.close('personM');this.refreshPersons();
-  },
-
   // TAB NAVIGATION
-  goTab(t){
-    this.curTab=t;
-    document.querySelectorAll('.tab').forEach(el=>el.classList.toggle('on',el.dataset.t===t));
-    ['home','property','rent','expense','khata','reminder','medical','travel','calendar','todo','diary','notepad','search'].forEach(id=>{
+  goTab(t, opts){
+    const nextTab=this._isValidTab(t)?t:'home';
+    const options=opts||{};
+    this.curTab=nextTab;
+    this._syncShellState(nextTab);
+    if(!options.skipHistory) this._syncRouteState(nextTab, !!options.replaceHistory);
+    try{ window.scrollTo({top:0,behavior:'auto'}); }catch(e){}
+    document.querySelectorAll('.tab').forEach(el=>el.classList.toggle('on',el.dataset.t===nextTab));
+    this._tabIds.forEach(id=>{
       const el=document.getElementById('pan-'+id);
-      if(el) el.style.display=id===t?'':'none';
+      if(el) el.style.display=id===nextTab?'':'none';
     });
-    this.renderTab(t);
+    this.renderTab(nextTab);
   },
   renderTab(t){
     this._ledgerCache={}; // Bug5 fix: clear cache at start of each render cycle
     this._inRenderTab=true;
-    this.renderPills();
+    try{ this.renderPills(); }catch(e){ console.error('[APP] renderPills failed:', e); }
     this._inRenderTab=false;
-    if(t==='home')this.renderHome();
-    if(t==='property')this.renderProperty();
-    if(t==='rent')this.renderRent();
-    if(t==='expense')this.renderExpense();
-    if(t==='reminder')this.renderReminders();
-    if(t==='medical')this.renderMedical();
-    if(t==='travel')this.renderTravel();
-    if(t==='calendar')this.renderCalendar();
-    if(t==='todo')this.renderTodo();
-    if(t==='diary')this.renderDiary();
-    if(t==='notepad')this.renderNotepadTab();
-    if(t==='khata')this.renderKhata();
-    if(t==='search')this.renderSearchTab();
+    const renderers={
+      home:'renderHome',property:'renderProperty',rent:'renderRent',expense:'renderExpense',
+      reminder:'renderReminders',medical:'renderMedical',travel:'renderTravel',calendar:'renderCalendar',
+      todo:'renderTodo',notepad:'renderNotepadTab',khata:'renderKhata',search:'renderSearchTab'
+    };
+    const fn=renderers[t];
+    if(fn && typeof this[fn]==='function'){
+      try{ this[fn](); }catch(e){ console.error('[APP] '+fn+' failed:', e); }
+    }
+    try{ if(typeof normalizeRequiredLabels === 'function') normalizeRequiredLabels(document.getElementById('pan-'+t)||document); }catch(e){}
+  },
+
+  setCurProp(propId, replaceHistory){
+    this.curProp=propId||'__all__';
+    if(this.curTab==='property'){
+      this.syncCurrentRoute(!!replaceHistory);
+      this.renderProperty();
+    }
   },
 
   // PILLS
@@ -154,24 +421,9 @@ const APP = {
   // ── 2. Reminder trigger date (unified — same as renderReminders) ──
   _getTrigDate(r){
     if(!r) return null;
-    if(r.mode==='recurring') return r.nextTrigger||r.start||null;
-    if(r.mode==='rent'||r.mode==='loan') return r._trigDate||null;
-    // alertDate = pre-calculated on save (dueDate - beforeDays). Use directly, no math.
-    if(r.alertDate) return r.alertDate;
-    // trigDate in new saves already equals alertDate — use directly
-    if(r.trigDate) return r.trigDate;
-    // Legacy: derive from dueDate/exp minus beforeDays
-    var _base = r.dueDate || r.exp || null;
-    if(!_base) return null;
-    var _bp = _base.split('-');
-    if(_bp.length!==3) return null;
-    var _by=parseInt(_bp[0]),_bm=parseInt(_bp[1])-1,_bd=parseInt(_bp[2]);
-    if(isNaN(_by)||isNaN(_bm)||isNaN(_bd)) return null;
-    var _d = new Date(_by,_bm,_bd,0,0,0,0);
-    var _days = parseInt(r.beforeDays||r.before||0);
-    if(_days>1440) _days=Math.round(_days/1440);
-    if(_days>0) _d.setDate(_d.getDate()-_days);
-    return _d.getFullYear()+'-'+String(_d.getMonth()+1).padStart(2,'0')+'-'+String(_d.getDate()).padStart(2,'0');
+    if(r.mode==='recurring') return r.nextTrigger||r.start||r.reminderDate||r.alertDate||r.trigDate||null;
+    if(r.mode==='rent'||r.mode==='loan') return r._trigDate||r.trigDate||null;
+    return r.reminderDate||r.alertDate||r.trigDate||r.dueDate||r.exp||null;
   },
 
   // ── 3. Days from today to a date (negative = past) ──
@@ -239,7 +491,7 @@ const APP = {
         id:'med_'+v.id,_src:'medical',mode:'expiry',
         name:(pat?pat.name+' — ':'')+( v.doctor?'Dr. '+v.doctor+' Follow-up':'Medical Follow-up'),
         type:'🏥 Medical',_trig:ni,_dTrig:dTrig,person:pat?pat.name:'',notes:v.purpose||v.meds||'',
-        exp:ni,before:'0'
+        exp:ni
       };
       if(dTrig===null)           cats.upcoming.push(entry);
       else if(dTrig<0)           cats.overdue.push(entry);
@@ -281,6 +533,12 @@ const APP = {
   // },
 
   renderPills(){
+    const pillsHost=document.getElementById('pillsBar');
+    if(this.curTab!=='home'){
+      if(pillsHost) pillsHost.innerHTML='';
+      return;
+    }
+    if(!pillsHost) return;
     // Bug5 fix: clear ledger cache so getTenantLedger recalculates fresh this cycle
     // (renderTab already clears it, but renderPills can be called standalone too)
     if(!this._inRenderTab) this._ledgerCache={};
@@ -294,6 +552,40 @@ const APP = {
     const renewExp=remState.expiredCount;
     const renewDue=remState.dueCount;
     const upTrips=this.trips.filter(t=>new Date(t.dep)>=now).length;
+    const todayIso=new Date(now.getFullYear(),now.getMonth(),now.getDate()).toISOString().split('T')[0];
+    const todayEventItems=[];
+    const pushTodayEvent=(label,type)=>{
+      if(!label) return;
+      todayEventItems.push({label:String(label).trim(),type:type||''});
+    };
+    const getReminderDate=(r)=>r.mode==='recurring'
+      ? (r.nextTrigger||r.start||r.reminderDate||r.alertDate||r.trigDate||null)
+      : (r.reminderDate||r.alertDate||r.trigDate||r.dueDate||r.exp||null);
+    this.reminders.forEach(r=>{
+      const rd=getReminderDate(r);
+      if(rd===todayIso) pushTodayEvent(r.name, r.type||'Reminder');
+    });
+    this.getCalEvents?.().forEach(ev=>{
+      if(ev.date===todayIso) pushTodayEvent(ev.title, ev.type||'Event');
+    });
+    this.trips.forEach(t=>{
+      if(t.dep===todayIso) pushTodayEvent(`Depart: ${t.dest}`, 'Travel');
+      if(t.ret===todayIso) pushTodayEvent(`Return: ${t.dest}`, 'Travel');
+    });
+    this.visits.forEach(v=>{
+      ['date','next','next2','next3'].forEach(k=>{
+        if(v[k]===todayIso){
+          const p=this.patients.find(x=>x.id===v.patId);
+          pushTodayEvent(`${p?p.name:'Patient'}${v.doctor?` — Dr. ${v.doctor}`:''}`, k==='date'?'Visit':'Follow-up');
+        }
+      });
+    });
+    const todayEventCount=todayEventItems.length;
+    const todayEventDetails=todayEventItems.slice(0,3).map(ev=>`
+      <div class="pill-note-row">
+        <b class="pill-note-title pill-note-title-info">${toTitleCase(ev.label)}</b>
+        ${ev.type?`<span class="pill-note-meta">${ev.type}</span>`:''}
+      </div>`).join('');
     
     // Overdue Rent Details
     let ovdRentDetails='';
@@ -305,10 +597,10 @@ const APP = {
         if(hasOverdue){
           const prop=this.props.find(p=>p.id===t.propId);
           const dueDay = t.due || 1;
-          ovdRentDetails+=`<div style="font-size:.65rem;padding:3px 0;border-bottom:1px solid #ffe0e0;">
-            <b style="color:#b92d2d;">${toTitleCase(t.name)}</b><br>
-            <span style="color:#b92d2d;font-weight:900;">₹${fmt(bal)}</span> · ${toTitleCase(prop?prop.name:'Property')}<br>
-            <span style="color:#999;">Due: ${dueDay}th Of Month</span>
+          ovdRentDetails+=`<div class="pill-note-row">
+            <b class="pill-note-title pill-note-title-danger">${toTitleCase(t.name)}</b>
+            <span class="pill-note-muted"><span class="pill-note-amount pill-note-amount-danger">${fmt(bal)}</span> · ${toTitleCase(prop?prop.name:'Property')}</span>
+            <span class="pill-note-meta">Due: ${dueDay}th Of Month</span>
           </div>`;
         }
       }
@@ -319,9 +611,9 @@ const APP = {
     this.visits.filter(r=>r.next).slice(0,4).forEach(r=>{
       const nd=r.next.includes('-')?r.next:dmyToIso(r.next);
       const p=this.patients.find(x=>x.id===r.patId);
-      medDetails+=`<div style="font-size:.65rem;padding:3px 0;border-bottom:1px solid #e0e8f0;">
-        <b style="color:#1760a0;">${toTitleCase(p?p.name:'Unknown')}</b><br>
-        <span style="color:#1760a0;">${fD(nd)}</span>
+      medDetails+=`<div class="pill-note-row">
+        <b class="pill-note-title pill-note-title-info">${toTitleCase(p?p.name:'Unknown')}</b>
+        <span class="pill-note-meta pill-note-title-info">${fD(nd)}</span>
       </div>`;
     });
     
@@ -330,16 +622,16 @@ const APP = {
     const pendTodos=_rawTodos.filter(t=>!t.done);
     let todoDetails='';
     pendTodos.slice(0,4).forEach(t=>{
-      todoDetails+=`<div style="font-size:.65rem;padding:3px 0;border-bottom:1px solid #e0f0e8;color:#1a6a38;">• ${toTitleCase(t.text)}</div>`;
+      todoDetails+=`<div class="pill-note-row pill-note-row-success"><span class="pill-note-inline">• ${toTitleCase(t.text)}</span></div>`;
     });
     
-    document.getElementById('pillsBar').innerHTML=`
-            <div class="pill" onclick="APP.goTab('rent')" style="background:linear-gradient(135deg,${pend<=0?'#f0faf4,#dcf5e8':'#fff0f0,#ffe0e0'});border-color:${pend<=0?'#90c8a0':'#f0a0a0'};"><div class="pill-lbl" style="color:${pend<=0?'var(--grn)':'#b92d2d'}"><b>💰 OVERDUE RENT</b></div>
-        <div class="pill-val" style="color:${pend<=0?'var(--grn)':'#b92d2d'};font-size:0.95rem;font-weight:900;">${pend<=0?'✅ Clear':fmt(pend)}</div>
-        ${ovdRentDetails?`<div style="margin-top:6px;max-height:90px;overflow-y:auto;">${ovdRentDetails}</div>`:`<div class="pill-sub" style="color:${pend<=0?'var(--grn)':'#b92d2d'};font-weight:700;">${pend<=0?'No Dues':'All Due'}</div>`}
+    pillsHost.innerHTML=`
+            <div class="pill" onclick="APP.goTab('rent')" style="background:#fff;border-color:#c3c6d7;border-left:4px solid ${pend<=0?'#10b981':'#f43f5e'};"><div class="pill-lbl" style="color:${pend<=0?'#10b981':'#f43f5e'}"><b><span class="material-symbols-outlined" style="font-size:14px;vertical-align:-2px;margin-right:4px;">notifications_active</span>OVERDUE RENT</b></div>
+        <div class="pill-val" style="color:${pend<=0?'#10b981':'#dc2626'};font-size:20px;font-weight:900;">${pend<=0?'Clear':fmt(pend)}</div>
+        ${ovdRentDetails?`<div class="pill-details pill-scroll">${ovdRentDetails}</div>`:`<div class="pill-sub" style="color:${pend<=0?'var(--grn)':'#b92d2d'};font-weight:700;">${pend<=0?'No Dues':'All Due'}</div>`}
       </div>
-      <div class="pill" onclick="APP.goTab('khata')" style="background:linear-gradient(135deg,#f5f0ff,#ede0ff);border-color:#c0a0f0;">
-        <div class="pill-lbl" style="color:var(--pur)"><b>📒 KHATA BOOK</b></div>
+      <div class="pill" onclick="APP.goTab('khata')" style="background:#fff;border-color:#c3c6d7;border-left:4px solid #a855f7;">
+        <div class="pill-lbl" style="color:#9333ea"><b><span class="material-symbols-outlined" style="font-size:14px;vertical-align:-2px;margin-right:4px;">book</span>KHATA BOOK</b></div>
         ${(()=>{
           const parties = APP.kbParties || [];
           const entries = APP.kbEntries || [];
@@ -351,39 +643,31 @@ const APP = {
             else if(e.type==='dena') balMap[e.partyId].dena+=Number(e.amount||0);
           });
           // Lena = others owe me (net positive), Dena = I owe them (net negative)
-          const lenaList=[], denaList=[];
           let lenaTotal=0, denaTotal=0;
           parties.forEach(p=>{
             const b=balMap[p.id]||{lena:0,dena:0};
             const net=b.lena-b.dena;
-            if(net>0){ lenaList.push({name:p.name,net}); lenaTotal+=net; }
-            else if(net<0){ denaList.push({name:p.name,net:Math.abs(net)}); denaTotal+=Math.abs(net); }
+            if(net>0){ lenaTotal+=net; }
+            else if(net<0){ denaTotal+=Math.abs(net); }
           });
-          lenaList.sort((a,b)=>b.net-a.net);
-          denaList.sort((a,b)=>b.net-a.net);
-          const nameRow=(name,amt,color)=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:1px 0;gap:3px;overflow:hidden;"><span style="font-size:.58rem;font-weight:700;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0;">${name}</span><span style="font-size:.56rem;font-weight:800;color:${color};white-space:nowrap;font-family:'JetBrains Mono',monospace;flex-shrink:0;">₹${Number(amt)>=100000?(Number(amt)/100000).toFixed(1)+'L':fmt(amt)}</span></div>`;
           return `
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-top:4px;width:100%;overflow:hidden;">
-              <div style="overflow:hidden;min-width:0;">
-                <div style="font-size:.55rem;color:#166534;font-weight:800;margin-bottom:2px;">🤲 Liya Hai</div>
-                <div style="font-size:.72rem;font-weight:900;color:#166534;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${Number(lenaTotal)>=100000?(Number(lenaTotal)/100000).toFixed(1)+'L':fmt(lenaTotal)}</div>
-                ${lenaList.slice(0,2).map(p=>nameRow(p.name,p.net,'#166534')).join('')}
-                ${lenaList.length>2?`<div style="font-size:.52rem;color:#166534;opacity:.7;">+${lenaList.length-2} more</div>`:''}
+            <div class="pill-split pill-split--compact" style="margin-top:8px;">
+              <div class="pill-split-col">
+                <div class="pill-mini-label" style="color:#166534;">🤲 Liya Hai</div>
+                <div class="pill-mini-value" style="color:#166534;">${Number(lenaTotal)>=100000?(Number(lenaTotal)/100000).toFixed(1)+'L':fmt(lenaTotal)}</div>
               </div>
-              <div style="overflow:hidden;min-width:0;">
-                <div style="font-size:.55rem;color:#c0392b;font-weight:800;margin-bottom:2px;">💸 Diya Hai</div>
-                <div style="font-size:.72rem;font-weight:900;color:#c0392b;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${Number(denaTotal)>=100000?(Number(denaTotal)/100000).toFixed(1)+'L':fmt(denaTotal)}</div>
-                ${denaList.slice(0,2).map(p=>nameRow(p.name,p.net,'#c0392b')).join('')}
-                ${denaList.length>2?`<div style="font-size:.52rem;color:#c0392b;opacity:.7;">+${denaList.length-2} more</div>`:''}
+              <div class="pill-split-col">
+                <div class="pill-mini-label" style="color:#c0392b;">💸 Diya Hai</div>
+                <div class="pill-mini-value" style="color:#c0392b;">${Number(denaTotal)>=100000?(Number(denaTotal)/100000).toFixed(1)+'L':fmt(denaTotal)}</div>
               </div>
             </div>
           `;
         })()}
       </div>
-      <div class="pill" style="background:linear-gradient(135deg,${renewTotal>0?'#fff8ee,#ffeedd':'#f0faf5,#e0f5e8'});border-color:${renewTotal>0?'#e8a060':'#90c8a0'};cursor:default;">
+      <div class="pill" style="background:#fff;border-color:#c3c6d7;border-left:4px solid #f97316;cursor:default;">
         <div onclick="APP.goTab('reminder')" style="cursor:pointer;">
-          <div class="pill-lbl" style="color:${renewTotal>0?'var(--org)':'var(--grn)'}"><b>🔔 REMINDERS</b></div>
-          <div class="pill-val" style="color:${renewTotal>0?'var(--org)':'var(--grn)'};font-size:1.1rem;font-weight:900;">${remState.total}</div>
+          <div class="pill-lbl" style="color:#ea580c"><b><span class="material-symbols-outlined" style="font-size:14px;vertical-align:-2px;margin-right:4px;">alarm</span>REMINDERS</b></div>
+          <div class="pill-val" style="color:#0f172a;font-size:20px;font-weight:900;">${remState.total}</div>
         </div>
         ${(()=>{
           const s=APP._calcRemindersState();
@@ -392,46 +676,46 @@ const APP = {
           const weekCnt=s.thisWeek.length;
           const monthCnt=s.thisMonth.length;
       const doneCnt=(()=>{try{return JSON.parse(localStorage.getItem('rk_done_ids')||'[]').length;}catch{return 0;}})();
-          return `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:2px;margin-top:6px;font-size:.62rem;text-align:center;" onclick="APP.goTab('reminder')">
-            <div style="border-right:1px solid rgba(0,0,0,0.1);padding:2px 0;">
-              <div style="font-weight:900;font-size:.9rem;color:#e05050;">${expiredCnt}</div>
-              <div style="color:#e05050;font-weight:700;font-size:.6rem;">Overdue</div>
+          return `<div class="pill-kpi-grid pill-kpi-grid--two-up" onclick="APP.goTab('reminder')">
+            <div class="pill-kpi-item is-alert">
+              <div class="pill-kpi-value">${expiredCnt}</div>
+              <div class="pill-kpi-label">Overdue</div>
             </div>
-            <div style="border-right:1px solid rgba(0,0,0,0.1);padding:2px 0;">
-              <div style="font-weight:900;font-size:.9rem;color:#e09050;">${todayCnt}</div>
-              <div style="color:#e09050;font-weight:700;font-size:.6rem;">Today</div>
+            <div class="pill-kpi-item">
+              <div class="pill-kpi-value">${todayCnt}</div>
+              <div class="pill-kpi-label">Today</div>
             </div>
-            <div style="border-right:1px solid rgba(0,0,0,0.1);padding:2px 0;">
-              <div style="font-weight:900;font-size:.9rem;color:#b89000;">${weekCnt}</div>
-              <div style="color:#b89000;font-weight:700;font-size:.6rem;">This Week</div>
+            <div class="pill-kpi-item">
+              <div class="pill-kpi-value">${weekCnt}</div>
+              <div class="pill-kpi-label">This Week</div>
             </div>
-            <div style="padding:2px 0;">
-              <div style="font-weight:900;font-size:.9rem;color:#1e7a45;">${monthCnt}</div>
-              <div style="color:#1e7a45;font-weight:700;font-size:.6rem;">This Month</div>
+            <div class="pill-kpi-item">
+              <div class="pill-kpi-value">${monthCnt}</div>
+              <div class="pill-kpi-label">This Month</div>
             </div>
           </div>
           `;
         })()}
       </div>
-      <div class="pill" onclick="APP.medFilter30=true;APP.goTab('medical')" style="background:linear-gradient(135deg,#f0f7ff,#deeeff);border-color:#90b8e8;">
-        <div class="pill-lbl" style="color:var(--blu)"><b>🏥 MEDICAL FOLLOW-UP</b></div>
-        <div class="pill-val" style="color:var(--blu);font-size:1.1rem;font-weight:900;">${this.visits.filter(r=>{if(!r.next)return false;const ni=r.next.includes('-')?r.next:dmyToIso(r.next);if(!ni)return false;const d=this._dFromNow(ni);return d!==null&&d<=30;}).length}</div>
-        ${medDetails?`<div style="margin-top:6px;max-height:90px;overflow-y:auto;">${medDetails}</div>`:`<div class="pill-sub" style="color:var(--blu);font-weight:700;">No Follow-Ups</div>`}
+      <div class="pill" onclick="APP.medFilter30=true;APP.goTab('medical')" style="background:#fff;border-color:#c3c6d7;border-left:4px solid #2563eb;">
+        <div class="pill-lbl" style="color:#2563eb"><b><span class="material-symbols-outlined" style="font-size:14px;vertical-align:-2px;margin-right:4px;">medical_services</span>MEDICAL FOLLOW-UP</b></div>
+        <div class="pill-val" style="color:#2563eb;font-size:20px;font-weight:900;">${this.visits.filter(r=>{if(!r.next)return false;const ni=r.next.includes('-')?r.next:dmyToIso(r.next);if(!ni)return false;const d=this._dFromNow(ni);return d!==null&&d<=30;}).length}</div>
+        ${medDetails?`<div class="pill-details pill-scroll">${medDetails}</div>`:`<div class="pill-sub" style="color:var(--blu);font-weight:700;">No Follow-Ups</div>`}
       </div>
-      <div class="pill" onclick="APP.goTab('travel')" style="background:linear-gradient(135deg,#f0faf8,#dcf5f0);border-color:#80c8b8;">
-        <div class="pill-lbl" style="color:var(--tel)"><b>✈️ TRIPS</b></div>
-        <div class="pill-val" style="color:var(--tel);font-size:1.1rem;font-weight:900;">${upTrips}</div>
+      <div class="pill" onclick="APP.goTab('travel')" style="background:#fff;border-color:#c3c6d7;border-left:4px solid #14b8a6;">
+        <div class="pill-lbl" style="color:#0f9488"><b><span class="material-symbols-outlined" style="font-size:14px;vertical-align:-2px;margin-right:4px;">flight_takeoff</span>TRIPS</b></div>
+        <div class="pill-val" style="color:#0f172a;font-size:20px;font-weight:900;">${upTrips}</div>
         <div class="pill-sub" style="color:var(--tel);font-weight:700;">Upcoming</div>
       </div>
-      <div class="pill" onclick="APP.goTab('calendar')" style="background:linear-gradient(135deg,#e8f4ff,#d0e8ff);border-color:#6090d8;">
-        <div class="pill-lbl" style="color:#1050a0"><b>📅 CALENDAR</b></div>
-        <div class="pill-val" style="color:#1050a0;font-size:.78rem;font-weight:900;">Open</div>
-        <div class="pill-sub" style="color:#1050a0;font-weight:700;">Events View</div>
+      <div class="pill" onclick="APP.goTab('calendar')" style="background:#fff;border-color:#c3c6d7;border-left:4px solid #6366f1;">
+        <div class="pill-lbl" style="color:#4f46e5"><b><span class="material-symbols-outlined" style="font-size:14px;vertical-align:-2px;margin-right:4px;">calendar_month</span>CALENDAR</b></div>
+        <div class="pill-val" style="color:#0f172a;font-size:20px;font-weight:900;">${todayEventCount}</div>
+        ${todayEventDetails?`<div class="pill-details pill-scroll">${todayEventDetails}</div>`:`<div class="pill-sub" style="color:#1050a0;font-weight:700;">No events today</div>`}
       </div>
-      <div class="pill" onclick="APP.goTab('todo')" style="background:linear-gradient(135deg,#e8fff0,#d0f0e0);border-color:#60b880;">
-        <div class="pill-lbl" style="color:#1a6a38"><b>✅ TO DO LIST</b></div>
-        <div class="pill-val" style="color:#1a6a38;font-size:1.1rem;font-weight:900;">${pendTodos.length}</div>
-        ${todoDetails?`<div style="margin-top:6px;max-height:90px;overflow-y:auto;">${todoDetails}</div>`:`<div class="pill-sub" style="color:#1a6a38;font-weight:700;">All done!</div>`}
+      <div class="pill" onclick="APP.goTab('todo')" style="background:#fff;border-color:#c3c6d7;border-left:4px solid #10b981;">
+        <div class="pill-lbl" style="color:#059669"><b><span class="material-symbols-outlined" style="font-size:14px;vertical-align:-2px;margin-right:4px;">check_circle</span>TO DO LIST</b></div>
+        <div class="pill-val" style="color:#059669;font-size:20px;font-weight:900;">${pendTodos.length}</div>
+        ${todoDetails?`<div class="pill-details pill-scroll">${todoDetails}</div>`:`<div class="pill-sub" style="color:#1a6a38;font-weight:700;">All done!</div>`}
       </div>`;
   },
 
@@ -566,10 +850,10 @@ const APP = {
 
         // 1. CATEGORY
         const catLabel=isRent?'Rent':isLoan?'Loan':isMedical?'Medical':(e.type||'Other').replace(/^[^\s]*\s/,'').replace(/^[\u{1F000}-\u{1FFFF}\u{2600}-\u{27FF}]\s*/u,'');
-        const catCell=`<td style="padding:7px 8px;white-space:nowrap;"><span style="font-size:.85rem;">${icon}</span><div style="font-size:.62rem;font-weight:700;color:var(--mut);margin-top:1px;">${catLabel}</div></td>`;
+        const catCell=`<td class="home-alerts-cell home-alerts-cell-cat" style="white-space:nowrap;"><span class="home-alerts-cat-icon">${icon}</span><div class="home-alerts-cat-label">${catLabel}</div></td>`;
 
         // 2. NAME + PERSON
-        const nameCell=`<td style="padding:7px 8px;max-width:150px;"><div style="font-size:.8rem;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${e.name}</div>${e.person?`<div style="font-size:.65rem;color:var(--mut);">👤 ${e.person}</div>`:''}</td>`;
+        const nameCell=`<td class="home-alerts-cell home-alerts-cell-name" style="max-width:180px;"><div class="home-alerts-name">${e.name}</div>${e.person?`<div class="home-alerts-person">👤 ${e.person}</div>`:''}</td>`;
 
         // 3. REMINDER DATE (trigger date)
         // Rent: always show invoice generation date (never blank)
@@ -598,17 +882,12 @@ const APP = {
         }
         var _entryDueDate = e.dueDate||e.trigDate||'';
         var _entryRemDate = e._remDate||e.reminderDate||e._trig||'';
-        // Reminder Date = alert trigger date (blue)
-        const _remBefore = (function(){
-          if(isRent||isLoan) return '';
-          var _bd=parseInt(e.beforeDays||0);
-          if(!_bd||isNaN(_bd)){var _rb=parseInt(e.before||0);_bd=_rb>1440?Math.round(_rb/1440):(_rb>0?_rb:0);}
-          if(!_bd) return '';
-          return _bd===1?'1 day before':_bd<7?_bd+' days before':_bd<30?Math.round(_bd/7)+' week'+(Math.round(_bd/7)>1?'s':'')+' before':Math.round(_bd/30)+' month'+(Math.round(_bd/30)>1?'s':'')+' before';
-        })();
-        const remDateCell=`<td style="padding:7px 8px;font-family:'JetBrains Mono',monospace;font-size:.72rem;white-space:nowrap;">
-          <span style="color:#1565c0;font-weight:700;">${(function(){var _r=_entryRemDate||trigDisp||'—'; return _r!==_entryDueDate&&_r?_r:trigDisp||'—';}())}</span>
-          ${_remBefore?`<div style="font-size:.58rem;color:#1565c0;opacity:.85;">${_remBefore}</div>`:''}
+        const remDateCell=`<td class="home-alerts-cell home-alerts-cell-date" style="font-family:'JetBrains Mono',monospace;white-space:nowrap;">
+          <span class="home-alerts-date" style="color:#1565c0;">${(function(){
+            var _r=_entryRemDate||'';
+            if(_r&&_r!==_entryDueDate) return fD(_r);
+            return trigDisp||(_r?fD(_r):'—');
+          }())}</span>
         </td>`;
 
         // 4. TASK DATE (for reminder) or AMOUNT (for rent/loan)
@@ -617,8 +896,8 @@ const APP = {
         const expVal=isRent?fmt(e.bal||0):isLoan?fmt(e._outstanding||e.bal||0):(_taskDateStr?fD(_taskDateStr):'—');
         const expLabel=isRent||isLoan?'Amt':'Due Date';
         const expColor=isRent||isLoan?'#e05050':'var(--txt)';
-        const expDateCell=`<td style="padding:7px 8px;font-family:'JetBrains Mono',monospace;font-size:.72rem;white-space:nowrap;">
-          <span style="color:${expColor};font-weight:700;">${expVal}</span>
+        const expDateCell=`<td class="home-alerts-cell home-alerts-cell-date" style="font-family:'JetBrains Mono',monospace;white-space:nowrap;">
+          <span class="home-alerts-date" style="color:${expColor};">${expVal}</span>
         </td>`;
 
         // 5. DAYS INFO — based on task date (_dDue), not alert date
@@ -631,7 +910,7 @@ const APP = {
 
         // 6. REMINDER TYPE
         const rType=isRent?'Auto-Rent':isLoan?'Auto-Loan':isMedical?'Follow-up':e.mode==='recurring'?'Recurring':'One-time';
-        const typeCell=`<td style="padding:7px 8px;font-size:.65rem;color:var(--mut);white-space:nowrap;">${rType}</td>`;
+        const typeCell=`<td class="home-alerts-cell home-alerts-meta" style="white-space:nowrap;">${rType}</td>`;
 
         // 7. FREQUENCY — use full repeatLabel if available, else fallback
         let freq='Once';
@@ -640,24 +919,15 @@ const APP = {
         else if(e.mode==='recurring'){
           freq=e.repeatLabel||(e.recurPeriod?({'1':'Daily','7':'Weekly','15':'15d','30':'Monthly','90':'Quarterly','180':'HalfYrly','365':'Yearly'}[e.recurPeriod]||e.recurPeriod+'d'):'Recurring');
         }
-        const freqCell=`<td style="padding:7px 8px;font-size:.65rem;color:var(--mut);max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${freq}">${freq}</td>`;
+        const freqCell=`<td class="home-alerts-cell home-alerts-meta" style="max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${freq}">${freq}</td>`;
 
-        // 8. ALERT BEFORE — normalise to integer days
-        var _bDays = parseInt(e.beforeDays||0);
-        if(!_bDays||isNaN(_bDays)){
-          var _bRaw=parseInt(e.before||0);
-          _bDays=_bRaw>1440?Math.round(_bRaw/1440):(_bRaw>0?_bRaw:0);
-        }
-        const beforeLabel=isRent||isLoan?'On invoice':_bDays>0?(_bDays===1?'1 day':_bDays<7?_bDays+' days':_bDays<30?Math.round(_bDays/7)+'wk':Math.round(_bDays/30)+'mo'):'Same day';
-        const beforeCell=`<td style="padding:7px 8px;font-size:.65rem;color:var(--mut);white-space:nowrap;">${beforeLabel}</td>`;
+        // 8. STATUS
+        const statusCell=`<td class="home-alerts-cell" style="white-space:nowrap;"><span class="home-alerts-status" style="background:${si.bg};color:${si.tc};">${si.label}</span></td>`;
 
-        // 9. STATUS
-        const statusCell=`<td style="padding:7px 8px;white-space:nowrap;"><span style="background:${si.bg};color:${si.tc};padding:2px 8px;border-radius:12px;font-size:.68rem;font-weight:700;">${si.label}</span></td>`;
-
-        const doneCell=`<td style="padding:7px 8px;white-space:nowrap;"><button onclick="event.stopPropagation();APP.markReminderDone('${e.id}')" style="background:#e8f5e9;color:#1a7a45;border:1.5px solid #90c8a0;border-radius:6px;padding:3px 9px;font-size:.68rem;font-weight:800;cursor:pointer;" title="Mark as done">✅</button></td>`;
+        const doneCell=`<td class="home-alerts-cell" style="white-space:nowrap;"><button class="home-alerts-done" onclick="event.stopPropagation();APP.markReminderDone('${e.id}')" title="Mark as done">✅</button></td>`;
         return `<tr style="background:${si.rowBg};border-left:3px solid ${borderC};"
           onmouseover="this.style.background='var(--dim)'" onmouseout="this.style.background='${si.rowBg||''}'">
-          ${catCell}${nameCell}${expDateCell}${remDateCell}${typeCell}${freqCell}${beforeCell}${statusCell}${doneCell}
+          ${catCell}${nameCell}${expDateCell}${remDateCell}${typeCell}${freqCell}${statusCell}${doneCell}
         </tr>`;
       }).join('');
 
@@ -665,31 +935,30 @@ const APP = {
       const expCount=allAlertRows.filter(e=>e._dTrig!==null&&e._dTrig<0).length;
       const todayCount=allAlertRows.filter(e=>e._dTrig===0).length;
 
-      alerts=`<div style="background:var(--card);border:1.5px solid var(--bdr);border-radius:12px;overflow:hidden;box-shadow:var(--sh);margin-bottom:14px;">
-        <div style="background:var(--card2);padding:10px 14px;border-bottom:1.5px solid var(--bdr2);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
-          <div style="display:flex;align-items:center;gap:8px;">
-            <span style="font-family:'Playfair Display',serif;font-size:1rem;font-weight:700;color:var(--acc);">🔔 Alerts Today</span>
-            ${expCount>0?`<span style="background:#fcebeb;color:#a32d2d;padding:2px 9px;border-radius:10px;font-size:.7rem;font-weight:700;">🔴 ${expCount} overdue</span>`:''}
-            ${todayCount>0?`<span style="background:#fff0cc;color:#854f0b;padding:2px 9px;border-radius:10px;font-size:.7rem;font-weight:700;">🔔 ${todayCount} due today</span>`:''}
+      alerts=`<div class="home-alerts-panel" style="background:#fff;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,.04);margin-bottom:14px;">
+        <div class="home-alerts-headbar" style="background:#fff;padding:18px 22px;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+          <div class="home-alerts-titlewrap" style="display:flex;align-items:center;gap:8px;">
+            <span class="home-alerts-title"><span class="material-symbols-outlined home-alerts-title-icon">notifications_active</span>Alerts Today</span>
+            ${expCount>0?`<span class="home-alerts-chip is-overdue">${expCount} OVERDUE</span>`:''}
+            ${todayCount>0?`<span class="home-alerts-chip is-today">${todayCount} DUE TODAY</span>`:''}
           </div>
-          <div style="display:flex;gap:6px;align-items:center;">
-            <span style="font-size:.7rem;color:var(--mut);">${urgCount} items</span>
-            <button class="btn b-out b-sm" onclick="APP.goTab('reminder')" style="font-size:.7rem;padding:3px 9px;">View All →</button>
+          <div class="home-alerts-actions" style="display:flex;gap:6px;align-items:center;">
+            <span class="home-alerts-count">${urgCount} items</span>
+            <button class="btn b-out b-sm home-alerts-cta" onclick="APP.goTab('reminder')">View All →</button>
           </div>
         </div>
-        <div style="overflow-x:auto;">
-          <table style="width:100%;border-collapse:collapse;min-width:480px;">
+        <div class="home-alerts-table-wrap" style="overflow-x:auto;">
+          <table class="home-alerts-table" style="width:100%;border-collapse:collapse;min-width:480px;">
             <thead>
-              <tr style="background:var(--card2);border-bottom:1.5px solid var(--bdr2);">
-                <th style="padding:6px 8px;text-align:left;font-size:.58rem;text-transform:uppercase;letter-spacing:.05em;color:var(--mut);">Category</th>
-                <th style="padding:6px 8px;text-align:left;font-size:.58rem;text-transform:uppercase;letter-spacing:.05em;color:var(--mut);">Name</th>
-                <th style="padding:6px 8px;text-align:left;font-size:.58rem;text-transform:uppercase;letter-spacing:.05em;color:var(--mut);">Due Date / Amt</th>
-                <th style="padding:6px 8px;text-align:left;font-size:.58rem;text-transform:uppercase;letter-spacing:.05em;color:var(--mut);">Reminder Date</th>
-                                <th style="padding:6px 8px;text-align:left;font-size:.58rem;text-transform:uppercase;letter-spacing:.05em;color:var(--mut);">Type</th>
-                <th style="padding:6px 8px;text-align:left;font-size:.58rem;text-transform:uppercase;letter-spacing:.05em;color:var(--mut);">Freq</th>
-                <th style="padding:6px 8px;text-align:left;font-size:.58rem;text-transform:uppercase;letter-spacing:.05em;color:var(--mut);">Before</th>
-                <th style="padding:6px 8px;text-align:left;font-size:.58rem;text-transform:uppercase;letter-spacing:.05em;color:var(--mut);">Status</th>
-                <th style="padding:6px 8px;text-align:left;font-size:.58rem;text-transform:uppercase;letter-spacing:.05em;color:var(--mut);">Done</th>
+              <tr class="home-alerts-headrow" style="background:var(--card2);border-bottom:1.5px solid var(--bdr2);">
+                <th class="home-alerts-head">Category</th>
+                <th class="home-alerts-head">Name</th>
+                <th class="home-alerts-head">Due Date / Amt</th>
+                <th class="home-alerts-head">Reminder Date</th>
+                <th class="home-alerts-head">Type</th>
+                <th class="home-alerts-head">Freq</th>
+                <th class="home-alerts-head">Status</th>
+                <th class="home-alerts-head">Done</th>
               </tr>
             </thead>
             <tbody>${rows}</tbody>
@@ -760,8 +1029,8 @@ const APP = {
 
     document.getElementById('pan-home').innerHTML=`${fuSection}${alerts}
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:11px;margin-top:11px;">
-        <div class="card" style="border-color:#90b8e8;">
-          <div class="card-hdr" style="background:#f0f7ff;"><div class="card-title" style="color:var(--blu)">📅 Calendar</div><button class="btn b-sm" style="background:#1760a0;color:#fff;border:none;" onclick="APP.goTab('calendar')">Open Full</button></div>
+        <div class="card" style="border-color:#e2e8f0;">
+          <div class="card-hdr" style="background:#fff;"><div class="card-title" style="color:#111827;display:flex;align-items:center;gap:8px;"><span class="material-symbols-outlined" style="font-size:24px;color:#2563eb;">calendar_month</span>Calendar</div><button class="btn b-sm" style="background:#2563eb;color:#fff;border:none;" onclick="APP.goTab('calendar')">Open Full</button></div>
           <div class="card-body" style="font-size:.82rem;">
             ${(()=>{const evs=[];const now2=new Date();
               allReminderEntries.filter(r=>r._dTrig!==null&&r._dTrig>=0&&r._dTrig<=7&&r._src==='reminder').slice(0,2).forEach(r=>evs.push(`<div style="padding:4px 0;border-bottom:1px solid var(--bdr);"><span class="badge br" style="font-size:.62rem">Rem</span> ${r.name} — ${fD(r._trig)}</div>`));
@@ -771,8 +1040,8 @@ const APP = {
             })()}
           </div>
         </div>
-        <div class="card" style="border-color:#90c8a0;">
-          <div class="card-hdr" style="background:#f0faf5;"><div class="card-title" style="color:var(--grn)">✅ To Do List</div><button class="btn b-sm" style="background:#1e7a45;color:#fff;border:none;" onclick="APP.goTab('todo')">Open Full</button></div>
+        <div class="card" style="border-color:#e2e8f0;">
+          <div class="card-hdr" style="background:#fff;"><div class="card-title" style="color:#111827;display:flex;align-items:center;gap:8px;"><span class="material-symbols-outlined" style="font-size:24px;color:#059669;">done_all</span>To Do List</div><button class="btn b-sm" style="background:#059669;color:#fff;border:none;" onclick="APP.goTab('todo')">Open Full</button></div>
           <div class="card-body" style="padding:10px 12px;">
             ${_renderTodoWidget()}
           </div>

@@ -59,8 +59,6 @@ Object.assign(APP, {
       const start=vDate('rmm_start');if(!start){alert('Start date zaroori hai!');return;}
       // Read period from hidden input (set by _rmmUpdatePeriod)
       const rp=document.getElementById('rmm_recur_period').value||'7';
-      const rbv=parseInt(document.getElementById('rmm_recur_bval').value)||0;
-      const rbu=document.getElementById('rmm_recur_bunit').value||'days';
       const nextT=this._computeNextRecurTrigger(start,parseInt(rp)||7);
       // Custom time
       const recHour=document.getElementById('rmm_rec_hour')?document.getElementById('rmm_rec_hour').value||'10':'10';
@@ -68,7 +66,7 @@ Object.assign(APP, {
       // Day/month selections
       const selDays=this._rmmGetSelectedDays();
       const selMonths=this._rmmGetSelectedMonths();
-      data={...data,start,end:vDate('rmm_end')||'',recurPeriod:rp,recurBeforeVal:rbv,recurBeforeUnit:rbu,nextTrigger:nextT,
+      data={...data,start,end:vDate('rmm_end')||'',recurPeriod:rp,nextTrigger:nextT,
         alertHour:recHour,alertMin:recMin,
         daysOfWeek:selDays,monthsOfYear:selMonths};
     } else {
@@ -99,41 +97,12 @@ Object.assign(APP, {
 
       // expiry is optional
       const exp = vDate('rmm_exp') || '';
-      // If exp is set AND trigDate was auto-calculated from exp, compute beforeDays
-      let beforeDays = '0';
-      if(exp && trigDate && exp !== trigDate){
-        try{
-          const ep=exp.split('-'),tp=trigDate.split('-');
-          if(ep.length===3&&tp.length===3){
-            const expD=new Date(parseInt(ep[0]),parseInt(ep[1])-1,parseInt(ep[2]),0,0,0,0);
-            const trigD=new Date(parseInt(tp[0]),parseInt(tp[1])-1,parseInt(tp[2]),0,0,0,0);
-            const diff=Math.round((expD-trigD)/86400000);
-            if(diff>0) beforeDays=String(diff);
-          }
-        }catch(e){}
-      }
-      // trigDate = the date user selected = Due Date (task/bill/expiry date)
-      // reminderDate = trigDate - beforeDays = when to alert (fires before due date)
-      var _rdCalc = trigDate;
-      var _bdInt  = parseInt(beforeDays)||0;
-      if(_bdInt > 0){
-        try{
-          var _p=trigDate.split('-');
-          if(_p.length===3){
-            var _rd=new Date(parseInt(_p[0]),parseInt(_p[1])-1,parseInt(_p[2]),0,0,0,0);
-            _rd.setDate(_rd.getDate()-_bdInt);
-            _rdCalc=_rd.getFullYear()+'-'+String(_rd.getMonth()+1).padStart(2,'0')+'-'+String(_rd.getDate()).padStart(2,'0');
-          }
-        }catch(_e){}
-      }
       data = {...data,
-        trigDate,                // Due Date (task/bill date — what user picked)
-        dueDate: trigDate,       // alias
-        reminderDate: _rdCalc,   // Alert trigger (trigDate - beforeDays)
-        alertDate:    _rdCalc,   // alias
+        trigDate,
+        dueDate: trigDate,
+        reminderDate: trigDate,
+        alertDate: trigDate,
         exp,
-        before:       beforeDays,
-        beforeDays:   _bdInt,
         issue:   vDate('rmm_issue')||'',
         autorenew: v('rmm_autorenew')||'no',
         period:  v('rmm_period')||'365',
@@ -505,27 +474,31 @@ Object.assign(APP, {
       this.renderReminders();this.renderPills();
       return;
     }
-    // Expiry-based: ask for new expiry date
-    const inp=prompt(`✅ ${r.name}\n\nNavy Expiry Date daalo (DD/MM/YYYY):\n(Reminder auto-calculate hoga)\n\nExample: 19/03/2027`,'');
+    // Expiry-based: update both due date and reminder date together
+    const inp=prompt(`✅ ${r.name}\n\nNayi date daalo (DD/MM/YYYY):\n\nExample: 19/03/2027`,'');
     if(!inp) return;
     const isoExp=dmyToIso(inp.trim());
     if(!isoExp){alert('Date format galat hai! DD/MM/YYYY mein likhein.');return;}
-    // NEW: compute new trigger date
-    const before=parseInt(r.before||30);
-    const newExp=new Date(isoExp);newExp.setDate(newExp.getDate()-before);
-    const newTrigStr=newExp.toISOString().split('T')[0];
     let rs=this.reminders;
-    rs=rs.map(x=>x.id===id?{...x,exp:isoExp,issue:(function(){var _n=new Date();return _n.getFullYear()+'-'+String(_n.getMonth()+1).padStart(2,'0')+'-'+String(_n.getDate()).padStart(2,'0');})()}:x);
+    rs=rs.map(x=>x.id===id?{
+      ...x,
+      exp:isoExp,
+      dueDate:isoExp,
+      trigDate:isoExp,
+      reminderDate:isoExp,
+      alertDate:isoExp,
+      start:isoExp,
+      issue:(function(){var _n=new Date();return _n.getFullYear()+'-'+String(_n.getMonth()+1).padStart(2,'0')+'-'+String(_n.getDate()).padStart(2,'0');})()
+    }:x);
     S.set('reminders',rs);
-    this.showToastMsg(`✅ ${r.name} — Updated! Reminder on: ${fD(newTrigStr)} (Expiry: ${inp.trim()})`);
+    this.showToastMsg(`✅ ${r.name} — Updated! Reminder on: ${fD(isoExp)}`);
     this.renderReminders();this.renderPills();
   },
 
   renderReminders(){
     // ══════════════════════════════════════════════════════
-    // REMINDER ENGINE — All calculations based on TRIGGER DATE
-    // Formula: triggerDate = expiryDate - beforeDays
-    // Status based ONLY on: today vs triggerDate
+    // REMINDER ENGINE — All calculations based on the saved reminder date
+    // Status based ONLY on: today vs reminder date
     // ══════════════════════════════════════════════════════
     const now=new Date();now.setHours(0,0,0,0);
 
@@ -545,34 +518,11 @@ Object.assign(APP, {
       'Visa':'📔','Vehicle RC':'🚘','PAN Card':'🪪','Aadhaar':'🪪','Other':'📌'
     };
 
-    // ── CORE: Get trigger date for any reminder type ──
-    // ✅ Uses reminderDate (= dueDate − before) when set; otherwise trigDate
+    // ── CORE: Get reminder date for any reminder type ──
     function getTrig(r){
       if(!r) return null;
-      if(r.mode==='recurring'){
-        if(r.nextTrigger) return r.nextTrigger;
-        if(r.start) return r.start;
-        return null;
-      }
-      // reminderDate = alert trigger (saved by rem-engine as trigDate - beforeDays)
-      if(r.reminderDate) return r.reminderDate;
-      if(r.alertDate)    return r.alertDate;
-      // Legacy: trigDate with no before = trigDate is both due and reminder
-      if(r.trigDate){
-        var _bDays = parseInt(r.beforeDays||0);
-        if(!_bDays){ var _rb=parseInt(r.before||0); _bDays=_rb>1440?Math.round(_rb/1440):_rb; }
-        if(_bDays>0){
-          var _dp=r.trigDate.split('-');
-          if(_dp.length===3){
-            var _d=new Date(parseInt(_dp[0]),parseInt(_dp[1])-1,parseInt(_dp[2]),0,0,0,0);
-            _d.setDate(_d.getDate()-_bDays);
-            return _d.getFullYear()+'-'+String(_d.getMonth()+1).padStart(2,'0')+'-'+String(_d.getDate()).padStart(2,'0');
-          }
-        }
-        return r.trigDate;
-      }
-      if(r.exp) return r.exp;
-      return null;
+      if(r.mode==='recurring') return r.nextTrigger||r.start||r.reminderDate||r.alertDate||r.trigDate||null;
+      return r.reminderDate||r.alertDate||r.trigDate||r.dueDate||r.exp||null;
     }
 
     // ── Days from today to a date (negative = past) ──
@@ -623,17 +573,11 @@ Object.assign(APP, {
       const dTrig=dFromNow(trig);
       const dExp=(r.mode!=='recurring'&&r.exp)?dFromNow(r.exp):null;
       const completed=_doneIds.has(r.id)||!!r.completed;
-      // dueDate=trigDate (what user set), reminderDate=alert trigger
       var _rDue  = r.dueDate||r.trigDate||trig;
       var _rRem  = r.reminderDate||r.alertDate||trig;
-      var _bLabel= r.beforeLabel||(function(){
-        var _bd=parseInt(r.beforeDays||0); if(!_bd||isNaN(_bd)){var _rb=parseInt(r.before||0);_bd=_rb>1440?Math.round(_rb/1440):_rb;}
-        return _bd>0?(_bd===1?'1 day before':_bd<7?_bd+' days before':_bd<30?Math.round(_bd/7)+' week'+(Math.round(_bd/7)>1?'s':'')+' before':Math.round(_bd/30)+' month'+(Math.round(_bd/30)>1?'s':'')+' before'):'';
-      })();
       allEntries.push({...r,
         _trig:_rRem, _dTrig:dFromNow(_rRem),
         _dDue:dFromNow(_rDue), _dueDate:_rDue, _remDate:_rRem,
-        _beforeLabel:_bLabel,
         _dExp:dExp,_src:'reminder',_category:'Other',completed});
     });
 
@@ -684,7 +628,7 @@ Object.assign(APP, {
       });
       if(rentDone) return; // hide from active list if marked done
       // Render card separately too
-      const waMsg=encodeURIComponent('💰 *Rent Due*\nTenant: '+t.name+'\nDue: ₹'+fmt(ledger.totalBalance)+'\n\nPlease pay.\nRaman Kumar');
+      const waMsg=encodeURIComponent('💰 *Rent Due*\nTenant: '+t.name+'\nDue: '+fmt(ledger.totalBalance)+'\n\nPlease pay.\nRaman Kumar');
       rentCards.push(`<div style="background:var(--card);border:2px solid #e05050;border-left:4px solid #e05050;border-radius:11px;padding:13px 14px;margin-bottom:8px;">
         <div style="display:flex;align-items:center;gap:10px;">
           <div style="width:40px;height:40px;border-radius:50%;background:rgba(224,80,80,.1);display:flex;align-items:center;justify-content:center;font-size:1.2rem;">💰</div>
@@ -693,14 +637,14 @@ Object.assign(APP, {
               <span style="font-size:.6rem;background:#e05050;color:#fff;padding:1px 6px;border-radius:8px;margin-left:4px;">Rent</span>
               <span style="font-size:.6rem;background:#e05050;color:#fff;padding:1px 6px;border-radius:8px;">AUTO</span>
             </div>
-            <div style="font-size:.73rem;color:var(--mut);margin-top:2px;">${prop?prop.name:'—'} · ${daysOv} days overdue · Due: ₹${fmt(ledger.totalBalance)}</div>
+            <div style="font-size:.73rem;color:var(--mut);margin-top:2px;">${prop?prop.name:'—'} · ${daysOv} days overdue · Due: ${fmt(ledger.totalBalance)}</div>
           </div>
           <span style="font-size:.7rem;background:#fff0f0;color:#e05050;border:1px solid #f09090;padding:2px 8px;border-radius:8px;white-space:nowrap;">${daysOv}d</span>
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;border-top:1px solid var(--bdr);padding-top:8px;">
           <button class="btn b-grn b-sm" onclick="APP.openPayModal('${t.id}')">+ Payment</button>
           ${t.ph?`<button class="btn b-sm" style="background:#e8f5e9;color:#1e7a45;border:1px solid #90c8a0;" onclick="APP.sendWhatsApp('${t.name}','${fmt(ledger.totalBalance)}','${t.ph}','rent')">📲 WA</button>`:`<button class="btn b-sm" style="background:#f0f2f5;color:#adb5bd;border:1px solid #e9ecef;cursor:not-allowed;" disabled title="Add phone">📵</button>`}
-          ${t.email?`<a class="btn b-sm" style="background:#fff0f0;color:#c0392b;border:1px solid #fecaca;text-decoration:none;" href="mailto:${t.email}?subject=${encodeURIComponent('Rent Due — '+t.name)}&body=${encodeURIComponent('Hello '+t.name+',\n\nYour rent of ₹'+fmt(ledger.totalBalance)+' is pending.\n\nThank you,\nRaman Kumar')}">📧 Email</a>`:`<button class="btn b-sm" style="background:#f0f2f5;color:#adb5bd;border:1px solid #e9ecef;cursor:not-allowed;" disabled>📧</button>`}
+          ${t.email?`<a class="btn b-sm" style="background:#fff0f0;color:#c0392b;border:1px solid #fecaca;text-decoration:none;" href="mailto:${t.email}?subject=${encodeURIComponent('Rent Due — '+t.name)}&body=${encodeURIComponent('Hello '+t.name+',\n\nYour rent of '+fmt(ledger.totalBalance)+' is pending.\n\nThank you,\nRaman Kumar')}">📧 Email</a>`:`<button class="btn b-sm" style="background:#f0f2f5;color:#adb5bd;border:1px solid #e9ecef;cursor:not-allowed;" disabled>📧</button>`}
           <button class="btn b-sm" style="background:#e3f2fd;color:#1760a0;border:1px solid #90b8e8;" onclick="APP.goTab('rent')">📒 Ledger</button>
           <button class="btn b-sm mark-done-btn" style="background:#e8f5e9;color:#1a7a45;border:1.5px solid #90c8a0;font-weight:800;" onclick="APP.markReminderDone('${rentId}')">✅ Mark Done</button>
         </div>
@@ -796,9 +740,9 @@ Object.assign(APP, {
             return '<div>📆 Expiry: <b style="color:'+_col+'">'+fD(e.exp)+'</b> '+_lbl+'</div>';
           })():''}
           ${isRentAuto?`<div style="display:grid;grid-template-columns:auto 1fr;gap:3px 10px;font-size:.72rem;">
-            <span style="color:var(--mut)">💰 Monthly Rent</span><span><b>₹${fmt(e._invoiceAmt||0)}</b></span>
-            ${e._receivedAmt>0?`<span style="color:var(--mut)">✅ Received</span><span style="color:var(--grn)"><b>₹${fmt(e._receivedAmt)}</b></span>`:''}
-            <span style="color:var(--mut)">⚡ Outstanding</span><span style="color:var(--red);font-weight:700">₹${fmt(e._balanceAmt||0)}</span>
+            <span style="color:var(--mut)">💰 Monthly Rent</span><span><b>${fmt(e._invoiceAmt||0)}</b></span>
+            ${e._receivedAmt>0?`<span style="color:var(--mut)">✅ Received</span><span style="color:var(--grn)"><b>${fmt(e._receivedAmt)}</b></span>`:''}
+            <span style="color:var(--mut)">⚡ Outstanding</span><span style="color:var(--red);font-weight:700">${fmt(e._balanceAmt||0)}</span>
             ${e._daysOv>0?`<span style="color:var(--mut)">⏰ Overdue</span><span style="color:var(--red);font-weight:700">${e._daysOv} days</span>`:''}
           </div>`:''}
           ${isLoanAuto?`<div style="display:grid;grid-template-columns:auto 1fr;gap:3px 10px;font-size:.72rem;">
@@ -806,12 +750,10 @@ Object.assign(APP, {
             <span style="color:var(--mut)">⚡ Outstanding</span><span style="color:var(--red);font-weight:700">${fmt(e._outstanding||0)}</span>
             ${e._trigDate?`<span style="color:var(--mut)">📅 Due Date</span><span>${fD(e._trigDate)}</span>`:''}
           </div>`:''}
-          ${isRecurring?`<div>🔁 ${prdLabel[e.recurPeriod]||e.recurPeriod}${parseInt(e.recurBeforeVal||0)>0?' · '+parseInt(e.recurBeforeVal)+' '+(e.recurBeforeUnit||'days')+' before':''}</div>`:''}
+          ${isRecurring?`<div>🔁 ${prdLabel[e.recurPeriod]||e.recurPeriod}</div>`:''}
           ${!isRecurring&&!isRentAuto&&!isLoanAuto&&!isMedical?(function(){
-            var _bd=parseInt(e.beforeDays||0); if(!_bd||isNaN(_bd)){var _rb=parseInt(e.before||0);_bd=_rb>1440?Math.round(_rb/1440):_rb;}
             var _due=e._dueDate||e.dueDate||e.trigDate||'';
             var _rem=e._remDate||e.reminderDate||'';
-            var _lbl=e._beforeLabel||e.beforeLabel||(_bd>0?(_bd===1?'1 day before':_bd+' days before'):'');
             var _dDue=e._dDue;
             var _sc=(_dDue===null||_dDue===undefined)?'var(--mut)':(_dDue<0?'#e05050':_dDue===0?'#e09050':'#1a7a45');
             var _sl=(_dDue===null||_dDue===undefined)?'':(_dDue<0?'('+Math.abs(_dDue)+'d overdue)':_dDue===0?'(today!)':'('+_dDue+'d away)');
@@ -827,7 +769,7 @@ Object.assign(APP, {
               _h+='<div style="display:flex;align-items:center;gap:8px;padding:4px 0;">';
               _h+='<span style="font-size:.62rem;color:var(--mut);min-width:76px;">🔔 Reminder</span>';
               _h+='<span style="font-weight:800;color:#1565c0;font-size:.78rem;">'+fD(_rem)+'</span>';
-              _h+=(_lbl?'<span style="font-size:.62rem;color:#6c757d;">('+_lbl+')</span>':'')+'</div>';
+              _h+='</div>';
             }
             return _h;
           })():''}
@@ -865,12 +807,10 @@ Object.assign(APP, {
             <div style="font-weight:800;font-size:.84rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${toTitleCase(e.name)}${typeLabel}${completedBadge}${e.snoozedUntil?`<span style="font-size:.55rem;background:#fff8ee;color:#b06000;border:1px solid #e0a040;padding:1px 5px;border-radius:5px;margin-left:4px;font-weight:700;">⏰ Snoozed</span>`:''}</div>
             <div style="font-size:.68rem;color:var(--mut);">
               ${e.type||'—'} ${isRecurring?'· 🔁 '+(prdLabel[e.recurPeriod]||'Recurring'):''}
-              ${!isRentAuto&&!isRecurring&&e.beforeLabel?'<span style="color:#2196f3;font-weight:700;margin-left:4px;">🔔 '+e.beforeLabel+'</span>':''}
             </div>
             ${!isRentAuto&&!isRecurring?(function(){
               var _due = e._dueDate||e.dueDate||e.trigDate||'';
               var _rem = e._remDate||e.reminderDate||e._trig||'';
-              var _lbl = e._beforeLabel||e.beforeLabel||'';
               var _same= !_due||!_rem||_due===_rem;
               var _h='<div style="font-size:.63rem;font-weight:700;color:var(--txt);margin-top:3px;">'
                 +'<span style="color:var(--mut);font-size:.58rem;">Due: </span>'
@@ -879,7 +819,7 @@ Object.assign(APP, {
                 _h+='<div style="font-size:.62rem;color:#6c757d;margin-top:1px;">🔔 <span style="color:var(--mut);">Reminder: </span>Same day</div>';
               } else {
                 _h+='<div style="font-size:.62rem;color:#1565c0;font-weight:700;margin-top:1px;">🔔 <span style="color:#1565c0;">Reminder: </span>'
-                  +fD(_rem)+(_lbl?' <span style="font-size:.58rem;font-weight:400;color:#6c757d;">('+_lbl+')</span>':'')+'</div>';
+                  +fD(_rem)+'</div>';
               }
               return _h;
             })():''}
@@ -1528,9 +1468,7 @@ Object.assign(APP, {
       const st   = getStatus(r);
       var _pDue = isRent?date:fD(r.dueDate||r.trigDate||'');
       var _pRem = isRent?date:fD(r.reminderDate||r.alertDate||r.trigDate||'');
-      var _pBd  = parseInt(r.beforeDays||0); if(!_pBd||isNaN(_pBd)){var _rb2=parseInt(r.before||0);_pBd=_rb2>1440?Math.round(_rb2/1440):_rb2;}
-      var _pLbl = r.beforeLabel||(_pBd>0?_pBd+'d before':'');
-      var _pRemFull = (_pDue!==_pRem&&_pLbl)?(_pRem+' ('+_pLbl+')'):(_pRem||_pDue||'—');
+      var _pRemFull = (_pRem||_pDue||'—');
       const rawNotes = stripE(r.notes||'');
       const notes = rawNotes.slice(0,80)+(rawNotes.length>80?'...':'');
       return [name, type, _pDue||'—', _pRemFull||'—', st.label, notes];

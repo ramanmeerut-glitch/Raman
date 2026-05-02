@@ -10,7 +10,7 @@
 // VAPID Key: BMpQ5oawocseSUa0Lym92UF0Icbp0BcEXQJWjGmgNvbfC6zmsnYgCUz66u1siEqD191J1OWDSTtSXbduVDh-4jE
 // ═══════════════════════════════════════════════════════
 
-const _VAPID = 'BMpQ5oawocseSUa0Lym92UF0Icbp0BcEXQJWjGmgNvbfC6zmsnYgCUz66u1siEqD191J1OWDSTtSXbduVDh-4jE';
+const _VAPID = (window.RAMAN_APP_CONFIG && window.RAMAN_APP_CONFIG.vapidKey) || '';
 
 // Register firebase-messaging-sw.js (must be in repo root on GitHub Pages)
 window._pushReady = false;

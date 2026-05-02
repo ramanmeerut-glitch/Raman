@@ -17,18 +17,24 @@ Object.assign(APP, {
     M.open('tvM');
   },
   saveTrip(){
-    const dest=v('tvm_dest');if(!dest){alert('Destination required!');return;}
-    const tvDocFiles=FUM.getFiles('fu_travel_doc_wrap');
-    const data={dest,city:v('tvm_city'),type:v('tvm_type'),dom:v('tvm_dom'),dep:vDate('tvm_dep'),ret:vDate('tvm_ret'),trans:v('tvm_trans'),ticket:v('tvm_ticket'),hotel:v('tvm_hotel'),hcity:v('tvm_hcity'),budget:Number(v('tvm_budget')),spent:Number(v('tvm_spent')),members:v('tvm_members'),photo:(tvDocFiles[0]||{}).url||'',docFiles:tvDocFiles,notes:v('tvm_notes')};
-    let ts=this.trips;
-    if(this.editId)ts=ts.map(t=>t.id===this.editId?{...t,...data}:t);
-    else{data.id=uid();ts.push(data);}
-    S.set('trips',ts);M.close('tvM');this.renderTravel();this.renderPills();
+    return this._runGuardedAction('saveTrip', (release)=>{
+      const dest=v('tvm_dest');if(!dest){alert('Destination required!');release();return;}
+      const tvDocFiles=FUM.getFiles('fu_travel_doc_wrap');
+      const data={dest,city:v('tvm_city'),type:v('tvm_type'),dom:v('tvm_dom'),dep:vDate('tvm_dep'),ret:vDate('tvm_ret'),trans:v('tvm_trans'),ticket:v('tvm_ticket'),hotel:v('tvm_hotel'),hcity:v('tvm_hcity'),budget:Number(v('tvm_budget')),spent:Number(v('tvm_spent')),members:v('tvm_members'),photo:(tvDocFiles[0]||{}).url||'',docFiles:tvDocFiles,notes:v('tvm_notes')};
+      let ts=this.trips;
+      if(this.editId)ts=ts.map(t=>t.id===this.editId?{...t,...data}:t);
+      else{data.id=uid();ts.push(data);}
+      S.set('trips',ts);M.close('tvM');this.renderTravel();this.renderPills();
+    });
   },
   delTrip(id){this.delCb=()=>{S.set('trips',this.trips.filter(t=>t.id!==id));this.renderTravel();this.renderPills();};document.getElementById('delMsg').textContent='Delete trip?';M.open('delM');},
-  saveBucket(){const dest=v('bkm_dest');if(!dest){alert('Destination required!');return;}const bs=this.buckets;bs.push({id:uid(),dest,pri:v('bkm_pri'),year:v('bkm_year'),notes:v('bkm_notes')});S.set('buckets',bs);M.close('bkM');this.renderTravel();},
+  saveBucket(){return this._runGuardedAction('saveBucket', (release)=>{const dest=v('bkm_dest');if(!dest){alert('Destination required!');release();return;}const bs=this.buckets;bs.push({id:uid(),dest,pri:v('bkm_pri'),year:v('bkm_year'),notes:v('bkm_notes')});S.set('buckets',bs);M.close('bkM');this.renderTravel();});},
   delBucket(id){this.delCb=()=>{S.set('buckets',this.buckets.filter(b=>b.id!==id));this.renderTravel();};document.getElementById('delMsg').textContent='Remove from bucket list?';M.open('delM');},
-  setTravelSub(s){this.travelSub=s;this.renderTravel();},
+  setTravelSub(s){
+    this.travelSub=s;
+    if(this.curTab==='travel' && this.syncCurrentRoute) this.syncCurrentRoute();
+    this.renderTravel();
+  },
 
   _packTemplates:{
     Business:['👔 Formal shirts (3)','👖 Trousers (2)','👞 Formal shoes','💼 Laptop & charger','📁 Documents & ID','🪥 Toiletries','💊 Medicines','📱 Phone charger','🔌 Power bank','💳 Cards & cash','🧣 Belt & tie','📓 Notebook & pen'],
@@ -123,13 +129,20 @@ Object.assign(APP, {
         <select id="tvTF" onchange="APP.filterTravel()"><option value="">All Transport</option><option>Flight</option><option>Train</option><option>Car</option><option>Bus</option><option>Cruise</option></select>
         <select id="tvDF" onchange="APP.filterTravel()"><option value="">All</option><option value="Domestic">Domestic</option><option value="International">International</option></select>
       </div>
-      <div style="background:var(--card2);border:1px solid var(--bdr);border-radius:10px;padding:10px 14px;margin-bottom:12px;">
-        <div style="font-size:.72rem;font-weight:800;color:var(--mut);margin-bottom:7px;">📅 Filter by Date Range</div>
-        <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;">
-          <span style="font-size:.72rem;color:var(--mut);font-weight:600;">From</span>
-          <span style="position:relative;display:inline-flex;align-items:center;"><input type="text" id="tvD1_txt" placeholder="DD/MM/YYYY" oninput="(function(el){var iso=dmyToIso(el.value);var h=document.getElementById('tvD1');if(iso){if(h)h.value=iso;el.style.borderColor='var(--acc)';}else{el.style.borderColor=el.value?'var(--red)':'var(--bdr2)';}APP.filterTravel();})(this)" style="font-family:'JetBrains Mono',monospace;font-size:.72rem;padding:3px 26px 3px 7px;border:1.5px solid var(--bdr2);border-radius:6px;background:var(--bg);color:var(--txt);width:108px;outline:none;"><span onclick="document.getElementById('tvD1').showPicker&&document.getElementById('tvD1').showPicker()" style="position:absolute;right:4px;cursor:pointer;font-size:.78rem;opacity:.65;user-select:none;">📅</span><input type="date" id="tvD1" onchange="(function(iso){var el=document.getElementById('tvD1_txt');if(el){el.value=iso?isoToDmy(iso):'';el.style.borderColor=iso?'var(--acc)':'var(--bdr2)';}APP.filterTravel();})(this.value)" style="position:absolute;opacity:0;width:1px;height:1px;pointer-events:none;"></span>
-          <span style="font-size:.72rem;color:var(--mut);font-weight:600;">To</span>
-          <span style="position:relative;display:inline-flex;align-items:center;"><input type="text" id="tvD2_txt" placeholder="DD/MM/YYYY" oninput="(function(el){var iso=dmyToIso(el.value);var h=document.getElementById('tvD2');if(iso){if(h)h.value=iso;el.style.borderColor='var(--acc)';}else{el.style.borderColor=el.value?'var(--red)':'var(--bdr2)';}APP.filterTravel();})(this)" style="font-family:'JetBrains Mono',monospace;font-size:.72rem;padding:3px 26px 3px 7px;border:1.5px solid var(--bdr2);border-radius:6px;background:var(--bg);color:var(--txt);width:108px;outline:none;"><span onclick="document.getElementById('tvD2').showPicker&&document.getElementById('tvD2').showPicker()" style="position:absolute;right:4px;cursor:pointer;font-size:.78rem;opacity:.65;user-select:none;">📅</span><input type="date" id="tvD2" onchange="(function(iso){var el=document.getElementById('tvD2_txt');if(el){el.value=iso?isoToDmy(iso):'';el.style.borderColor=iso?'var(--acc)':'var(--bdr2)';}APP.filterTravel();})(this.value)" style="position:absolute;opacity:0;width:1px;height:1px;pointer-events:none;"></span>
+      <div class="date-filter-panel">
+        <div class="date-filter-bar">
+          <div class="date-filter-bar__tools">
+            ${renderCompactDateRangeFilter({
+              label:'Date',
+              fromId:'tvD1',
+              toId:'tvD2',
+              fromValue:'',
+              toValue:'',
+              fromOnChange:"APP.filterTravel()",
+              toOnChange:"APP.filterTravel()",
+              className:'date-filter-inline--tight'
+            })}
+          </div>
         </div>
       </div>`;
 

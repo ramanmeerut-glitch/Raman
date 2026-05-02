@@ -1,5 +1,5 @@
 /* rem-engine.js — Android-style Reminder Engine (REM)
- * Full date-picker, time-picker, repeat configurator, before-reminder logic.
+ * Full date-picker, time-picker, and repeat configurator.
  * Exports window.REM with public API.
  * Also wires REM → APP.openReminderModal on DOMContentLoaded.
  */
@@ -17,8 +17,6 @@ window.REM = (function(){
     selHour: 9,         // 1-12
     selMin: 0,
     selAmPm: 'AM',
-    beforeMin: 0,
-    beforeLabel: 'No advance notice',
     repeatType: 'none',
     repeatEvery: 1,
     repeatDays: [],
@@ -54,9 +52,6 @@ window.REM = (function(){
     state.selHour  = now.getHours() % 12 || 12;
     state.selMin   = Math.ceil(now.getMinutes() / 5) * 5 % 60;
     state.selAmPm  = now.getHours() >= 12 ? 'PM' : 'AM';
-    state.beforeMin   = 0;
-    state.beforeLabel = '';
-    state.beforeDays  = 0;
     state.repeatType     = 'none';
     state.repeatEvery    = 1;
     state.repeatDays     = [];
@@ -67,17 +62,10 @@ window.REM = (function(){
     state.repeatEnds     = 'never';
     state.repeatCount    = 10;
     state.repeatEndDate  = '';
-    // Reset before dropdowns only if creating NEW reminder (not editing)
-    if(!editId) {
-      _resetBeforeDropdowns();
-    }
-
-    // Populate persons
+    // Single-owner dashboard: keep a stable reminder owner value for older records.
     var personSel = document.getElementById('rem_person_sel');
-    if(personSel && window.APP && window.APP.persons) {
-      personSel.innerHTML = window.APP.persons.map(function(p){
-        return '<option>'+p+'</option>';
-      }).join('');
+    if(personSel) {
+      personSel.innerHTML = '<option>Raman</option>';
     }
 
     // If editing, populate fields
@@ -120,8 +108,6 @@ window.REM = (function(){
           state.repeatCount      = r.repeatCount      || 10;
           state.repeatEndDate    = r.repeatEndDate     || '';
         }
-        // ✅ Restore "Remind Before" dropdowns from saved data
-        _restoreBeforeDropdowns(r);
       }
     } else {
       var ti = document.getElementById('rem_title_inp');
@@ -139,7 +125,6 @@ window.REM = (function(){
     // Update displays
     updateDateDisplay();
     updateTimeDisplay();
-    updateBeforeDisplay();
     updateRepeatDisplay();
 
     overlay.style.display = 'flex';
@@ -156,7 +141,7 @@ window.REM = (function(){
   }
 
   function closeAllPopups() {
-    ['rem_date_picker','rem_time_picker','rem_before_popup','rem_repeat_popup'].forEach(function(id){
+    ['rem_date_picker','rem_time_picker','rem_repeat_popup'].forEach(function(id){
       var el = document.getElementById(id);
       if(el) el.style.display = 'none';
     });
@@ -179,18 +164,6 @@ window.REM = (function(){
     var m = String(state.selMin).padStart(2,'0');
     el.textContent = state.selHour + ':' + m + ' ' + state.selAmPm;
     el.style.color = '#2196f3';
-  }
-
-  // updateBeforeDisplay — now a shim, real logic is in _showBeforePreview (defined later)
-  function updateBeforeDisplay() {
-    if(typeof _showBeforePreview === 'function') _showBeforePreview();
-  }
-
-  function _updateReminderDateFromBefore() {
-    if(!state.selDate || !state.beforeMin) return;
-    var rd = new Date(state.selDate.getTime());
-    rd.setDate(rd.getDate() - state.beforeDays);
-    state.reminderDate = rd;
   }
 
   function updateRepeatDisplay() {
@@ -254,17 +227,7 @@ window.REM = (function(){
 
     var mode = state.repeatType !== 'none' ? 'recurring' : 'expiry';
 
-    // ✅ Compute correct reminderDate from dueDate - beforeDays
     var reminderDate = trigDate;
-    var beforeDays = state.beforeDays || 0;
-    if(beforeDays > 0) {
-      try {
-        var _dp = trigDate.split('-');
-        var _dObj = new Date(parseInt(_dp[0]), parseInt(_dp[1])-1, parseInt(_dp[2]), 0,0,0,0);
-        _dObj.setDate(_dObj.getDate() - beforeDays);
-        reminderDate = _dObj.getFullYear()+'-'+String(_dObj.getMonth()+1).padStart(2,'0')+'-'+String(_dObj.getDate()).padStart(2,'0');
-      } catch(e){}
-    }
 
     var data = {
       name:       title.trim(),
@@ -274,13 +237,10 @@ window.REM = (function(){
       notes:      note,
       mode:       mode,
       trigDate:   trigDate,     // dueDate
-      reminderDate: reminderDate, // actual alert date = dueDate - before
+      reminderDate: reminderDate,
       exp:        expDate || '',
       alertHour:  alertHour,
       alertMin:   alertMin,
-      before:     String(state.beforeMin),
-      beforeLabel: state.beforeLabel,
-      beforeDays: String(beforeDays),
       repeatType:        state.repeatType,
       repeatEvery:       state.repeatEvery,
       repeatDays:        state.repeatDays||[],
@@ -587,181 +547,6 @@ window.REM = (function(){
     updateTimeDisplay();
   }
 
-  // ═══════════════════════════════════════════════════════
-  // REMIND BEFORE — Clean dropdown system
-  // Flow: user picks Unit → number dropdown appears → user picks number
-  //       → state updated → preview shown → saved correctly
-  // ═══════════════════════════════════════════════════════
-
-  var BEFORE_UNIT_MAX  = { Minutes:60, Hours:24, Days:30, Weeks:52, Months:12, Years:20 };
-  var BEFORE_UNIT_MINS = { Minutes:1,  Hours:60, Days:1440, Weeks:10080, Months:43200, Years:525600 };
-
-  // Called when user changes the UNIT dropdown
-  function onBeforeUnitChange() {
-    // Skip if we're restoring from saved data
-    if(window._restoringBefore) {
-      return;
-    }
-
-    var unitSel = document.getElementById('rem_before_unit');
-    var numSel  = document.getElementById('rem_before_num');
-    if(!unitSel || !numSel) return;
-    var unit = unitSel.value;
-
-    if(unit === 'none') {
-      // Hide number dropdown, clear state
-      numSel.style.display = 'none';
-      state.beforeMin   = 0;
-      state.beforeDays  = 0;
-      state.beforeLabel = '';
-      _showBeforePreview();
-      return;
-    }
-
-    // Populate number dropdown for chosen unit
-    var max = BEFORE_UNIT_MAX[unit] || 30;
-    var html = '';
-    for(var i = 1; i <= max; i++) html += '<option value="'+i+'">'+i+'</option>';
-    numSel.innerHTML = html;
-    numSel.value = '1';
-    numSel.style.display = 'block';   // show it
-
-    // Apply state for default = 1
-    _applyBefore(1, unit);
-  }
-
-  // Called when user changes the NUMBER dropdown
-  function onBeforeNumChange() {
-    var unitSel = document.getElementById('rem_before_unit');
-    var numSel  = document.getElementById('rem_before_num');
-    if(!unitSel || !numSel) return;
-    var unit = unitSel.value;
-    var num  = parseInt(numSel.value) || 1;
-    _applyBefore(num, unit);
-  }
-
-  // Kept for backward compat (old name used in HTML onchange attr)
-  function onBeforeDropdownChange() { onBeforeNumChange(); }
-
-  // Core: apply a number+unit to state and refresh preview
-  function _applyBefore(num, unit) {
-    if(!unit || unit === 'none' || !num) {
-      state.beforeMin = 0; state.beforeDays = 0; state.beforeLabel = '';
-      _showBeforePreview(); return;
-    }
-    var minsPerUnit  = BEFORE_UNIT_MINS[unit] || 1440;
-    state.beforeMin  = num * minsPerUnit;
-    state.beforeDays = Math.round(state.beforeMin / 1440);   // for date math
-    // Exact label: "1 day before", "18 days before", "1 month before" etc.
-    var u = unit.toLowerCase();
-    if(num === 1 && u.endsWith('s')) u = u.slice(0, -1);    // "days" → "day"
-    state.beforeLabel = num + ' ' + u + ' before';
-    _showBeforePreview();
-  }
-
-  // Update the preview text under the dropdowns
-  function _showBeforePreview() {
-    var disp = document.getElementById('rem_before_disp');
-    var hint = document.getElementById('rem_before_days_hint');
-    if(disp) {
-      if(state.beforeMin > 0 && state.beforeLabel) {
-        disp.textContent = '🔔 Remind: ' + state.beforeLabel;
-        disp.style.display = 'block';
-      } else {
-        disp.style.display = 'none';
-      }
-    }
-    if(hint) {
-      if(state.beforeDays > 0) {
-        // Also show what the actual reminder date will be
-        var remDateStr = '';
-        if(state.selDate) {
-          var rd = new Date(state.selDate.getTime());
-          rd.setDate(rd.getDate() - state.beforeDays);
-          var dd=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-          remDateStr = ' → Alert: ' + dd[rd.getDay()] + ' ' + rd.getDate() + ' ' +
-                       MONTHS[rd.getMonth()].slice(0,3) + ' ' + rd.getFullYear();
-        }
-        hint.textContent = '= ' + state.beforeDays + ' day' + (state.beforeDays>1?'s':'') + ' before due date' + remDateStr;
-        hint.style.display = 'block';
-      } else {
-        hint.style.display = 'none';
-      }
-    }
-  }
-
-  // Alias used in updateBeforeDisplay calls throughout the file
-  function updateBeforeDisplay() { _showBeforePreview(); }
-
-  // Reset both dropdowns to "no advance" state (called on modal open)
-  function _resetBeforeDropdowns() {
-    var unitSel = document.getElementById('rem_before_unit');
-    var numSel  = document.getElementById('rem_before_num');
-    if(unitSel) unitSel.value = 'none';
-    if(numSel)  { numSel.innerHTML = ''; numSel.style.display = 'none'; }
-    state.beforeMin = 0; state.beforeDays = 0; state.beforeLabel = '';
-    _showBeforePreview();
-  }
-
-  // Restore before value when EDITING an existing reminder
-  function _restoreBeforeDropdowns(r) {
-    if(!r) return;
-    // Try to restore from beforeLabel first (most accurate)
-    var label = r.beforeLabel || '';
-    var beforeMins = parseInt(r.before) || 0;   // r.before stores minutes
-    if(!beforeMins && r.beforeDays) beforeMins = parseInt(r.beforeDays) * 1440;
-    if(!beforeMins) return;   // no before set
-
-    // Figure out unit + num from stored minutes
-    var bestUnit = 'Days', bestNum = 1;
-    if(beforeMins % 525600 === 0 && beforeMins >= 525600) { bestUnit='Years';   bestNum=beforeMins/525600; }
-    else if(beforeMins % 43200 === 0 && beforeMins >= 43200) { bestUnit='Months'; bestNum=beforeMins/43200; }
-    else if(beforeMins % 10080 === 0 && beforeMins >= 10080) { bestUnit='Weeks';  bestNum=beforeMins/10080; }
-    else if(beforeMins % 1440 === 0  && beforeMins >= 1440)  { bestUnit='Days';   bestNum=beforeMins/1440;  }
-    else if(beforeMins % 60 === 0    && beforeMins >= 60)    { bestUnit='Hours';  bestNum=beforeMins/60;    }
-    else                                                       { bestUnit='Minutes'; bestNum=beforeMins;     }
-
-    // Set unit dropdown WITHOUT triggering onchange
-    var unitSel = document.getElementById('rem_before_unit');
-    var numSel  = document.getElementById('rem_before_num');
-    if(!unitSel || !numSel) return;
-    
-    // Check current value - only set if different to avoid triggering change
-    var needsUnitChange = unitSel.value !== bestUnit;
-    if(needsUnitChange) {
-      // Temporarily disable by setting a flag instead of removing handler
-      window._restoringBefore = true;
-      unitSel.value = bestUnit;
-    }
-
-    // Populate number dropdown
-    var max = BEFORE_UNIT_MAX[bestUnit] || 30;
-    // If saved number exceeds max, extend the max to accommodate it
-    if(bestNum > max) max = bestNum;
-    var html = '';
-    for(var i = 1; i <= max; i++) html += '<option value="'+i+'">'+i+'</option>';
-    numSel.innerHTML = html;
-    
-    // Set value - dropdown is repopulated so onchange won't fire yet
-    numSel.value = String(bestNum);
-    numSel.style.display = 'block';
-    
-    // Clear the flag
-    window._restoringBefore = false;
-
-    _applyBefore(bestNum, bestUnit);
-  }
-
-  // Stubs for backward compat
-  function openRemindBefore() {}
-  function showMoreBefore()   {}
-  function confirmBefore()    { _showBeforePreview(); closeBeforePopup(); }
-  function closeBeforePopup() { var p=document.getElementById('rem_before_popup'); if(p) p.style.display='none'; }
-  function setBeforeQuick(mins, label) {
-    state.beforeMin = mins; state.beforeLabel = label;
-    state.beforeDays = Math.round(mins/1440); _showBeforePreview();
-  }
-
   function parseTimeString(val) {
     if(!val) return 0;
     val = val.toString().trim().toLowerCase();
@@ -1060,9 +845,6 @@ window.REM = (function(){
     confirmTime: confirmTime, setAmPm: setAmPm, clearTime: clearTime,
     _onHrScroll: _onHrScroll, _onMinScroll: _onMinScroll,
     _selectHr: _selectHr, _selectMin: _selectMin,
-    openRemindBefore: openRemindBefore, closeBeforePopup: closeBeforePopup,
-    setBeforeQuick: setBeforeQuick, showMoreBefore: showMoreBefore, confirmBefore: confirmBefore,
-    onBeforeUnitChange: onBeforeUnitChange, onBeforeNumChange: onBeforeNumChange, onBeforeDropdownChange: onBeforeDropdownChange,
     openRepeat: openRepeat, closeRepeatPopup: closeRepeatPopup,
     updateRepeatUI: updateRepeatUI, confirmRepeat: confirmRepeat,
     _toggleDay: _toggleDay, _setMonthMode: _setMonthMode,

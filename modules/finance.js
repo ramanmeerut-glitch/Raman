@@ -335,8 +335,9 @@ Object.assign(APP, {
     }
   },
   saveExpense(){
+    return this._runGuardedAction('saveExpense', (release)=>{
     const amt=v('exm_amt').replace(/,/g,''),date=vDate('exm_date')||(function(){var _n=new Date();return _n.getFullYear()+'-'+String(_n.getMonth()+1).padStart(2,'0')+'-'+String(_n.getDate()).padStart(2,'0');})();
-    if(!amt||isNaN(Number(amt))){alert('Amount daalo!');return;}
+    if(!amt||isNaN(Number(amt))){alert('Amount daalo!');release();return;}
     const type=v('exm_type')||'expense';
 
     // account: read from select; if __other__ use blank
@@ -349,13 +350,14 @@ Object.assign(APP, {
 
     // ── FIX 1: MANDATORY ACCOUNT VALIDATION ──
     if(type==='transfer'){
-      if(!fromAcc){ this._showFieldError('exm_from_acc','Please select FROM account!'); return; }
-      if(!toAcc)  { this._showFieldError('exm_to_acc',  'Please select TO account!');   return; }
-      if(fromAcc===toAcc){ alert('From and To account same nahi ho sakta!'); return; }
+      if(!fromAcc){ this._showFieldError('exm_from_acc','Please select FROM account!'); release(); return; }
+      if(!toAcc)  { this._showFieldError('exm_to_acc',  'Please select TO account!'); release(); return; }
+      if(fromAcc===toAcc){ alert('From and To account same nahi ho sakta!'); release(); return; }
     } else if(type!=='loan'){
       // For expense / income — account is mandatory
       if(!acctVal || acctVal===''){
         this._showFieldError('exm_account','⚠️ Please select an account!');
+        release();
         return;
       }
     }
@@ -375,7 +377,7 @@ Object.assign(APP, {
     // Loan Given: extra fields
     if(type==='loan'){
       const borrower=document.getElementById('exm_borrower')?document.getElementById('exm_borrower').value.trim():'';
-      if(!borrower){alert('Borrower name required for Loan Given!');return;}
+      if(!borrower){alert('Borrower name required for Loan Given!');release();return;}
       data.loanBorrower=borrower;
       const lpEl=document.getElementById('exm_loan_phone');
       if(lpEl&&lpEl.value.trim()) data.loanPhone=lpEl.value.trim();
@@ -405,6 +407,7 @@ Object.assign(APP, {
       this._syncLoanReminders();
     }
     M.close('expM');this.renderExpense();this.renderPills();
+    });
   },
 
   // ── Show error on account select field ──
@@ -535,7 +538,6 @@ Object.assign(APP, {
         person:loan.loanBorrower||'',
         mode:'loan',
         exp:trigDate,
-        before:'0',
         _trigDate:trigDate,
         _dTrig:dTrig,
         _loanAmt:loan.amount,
@@ -689,6 +691,7 @@ Object.assign(APP, {
 
   _finNav(sub){
     this.finSub=sub;
+    if(this.curTab==='expense' && this.syncCurrentRoute) this.syncCurrentRoute();
     this.renderExpense();
   },
 
@@ -711,15 +714,22 @@ Object.assign(APP, {
     const from=this._finFrom||'';
     const to=this._finTo||'';
     const periodLabel=from||to?((from||'Start')+' → '+(to||'Today')):'All Time';
-    return `<div style="background:var(--card2);border:1px solid var(--bdr);border-radius:10px;padding:10px 14px;margin-bottom:12px;">
-      <div style="font-size:.72rem;font-weight:800;color:var(--mut);margin-bottom:7px;">📅 Filter by Date Range</div>
-      <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;">
-        <span style="font-size:.72rem;color:var(--mut);font-weight:600;">From</span>
-        <span style="position:relative;display:inline-flex;align-items:center;"><input type="text" id="df_ftf" value="${from?isoToDmy(from):''}" placeholder="DD/MM/YYYY" oninput="(function(el){var iso=dmyToIso(el.value);var h=document.getElementById('dfh_ftf');if(iso){if(h)h.value=iso;el.style.borderColor='var(--acc)';APP._finFrom=iso;APP.renderExpense();}else{el.style.borderColor=el.value?'var(--red)':'var(--bdr2)';}})(this)" style="font-family:'JetBrains Mono',monospace;font-size:.72rem;padding:3px 26px 3px 7px;border:1.5px solid var(--bdr2);border-radius:6px;background:var(--bg);color:var(--txt);width:108px;outline:none;letter-spacing:.02em;"><span onclick="document.getElementById('dfh_ftf').showPicker&&document.getElementById('dfh_ftf').showPicker()" style="position:absolute;right:4px;cursor:pointer;font-size:.78rem;opacity:.65;user-select:none;">📅</span><input type="date" id="dfh_ftf" value="${from||''} " onchange="(function(iso){var el=document.getElementById('df_ftf');if(el){el.value=iso?isoToDmy(iso):'';el.style.borderColor=iso?'var(--acc)':'var(--bdr2)';}  APP._finFrom=iso;APP.renderExpense();})(this.value)" style="position:absolute;opacity:0;width:1px;height:1px;pointer-events:none;"></span>
-        <span style="font-size:.72rem;color:var(--mut);font-weight:600;">To</span>
-        <span style="position:relative;display:inline-flex;align-items:center;"><input type="text" id="df_ftt" value="${to?isoToDmy(to):''}" placeholder="DD/MM/YYYY" oninput="(function(el){var iso=dmyToIso(el.value);var h=document.getElementById('dfh_ftt');if(iso){if(h)h.value=iso;el.style.borderColor='var(--acc)';APP._finTo=iso;APP.renderExpense();}else{el.style.borderColor=el.value?'var(--red)':'var(--bdr2)';}})(this)" style="font-family:'JetBrains Mono',monospace;font-size:.72rem;padding:3px 26px 3px 7px;border:1.5px solid var(--bdr2);border-radius:6px;background:var(--bg);color:var(--txt);width:108px;outline:none;letter-spacing:.02em;"><span onclick="document.getElementById('dfh_ftt').showPicker&&document.getElementById('dfh_ftt').showPicker()" style="position:absolute;right:4px;cursor:pointer;font-size:.78rem;opacity:.65;user-select:none;">📅</span><input type="date" id="dfh_ftt" value="${to||''} " onchange="(function(iso){var el=document.getElementById('df_ftt');if(el){el.value=iso?isoToDmy(iso):'';el.style.borderColor=iso?'var(--acc)':'var(--bdr2)';}  APP._finTo=iso;APP.renderExpense();})(this.value)" style="position:absolute;opacity:0;width:1px;height:1px;pointer-events:none;"></span>
-        ${from||to?`<button onclick="APP._finFrom='';APP._finTo='';APP.renderExpense();" class="btn b-sm b-out" style="font-size:.65rem;padding:2px 7px;">✕ Clear</button>`:''}
-        <span style="font-size:.68rem;color:var(--acc);font-weight:700;margin-left:4px;">${periodLabel}</span>
+    return `<div class="date-filter-panel">
+      <div class="date-filter-bar">
+        <div class="date-filter-bar__tools">
+          ${renderCompactDateRangeFilter({
+            label:'Date',
+            fromId:'dfh_ftf',
+            toId:'dfh_ftt',
+            fromValue:from,
+            toValue:to,
+            fromOnChange:"APP._finFrom=this.value;APP.renderExpense()",
+            toOnChange:"APP._finTo=this.value;APP.renderExpense()",
+            clearOnClick:"APP._finFrom='';APP._finTo='';APP.renderExpense()",
+            className:'date-filter-inline--tight'
+          })}
+        </div>
+        <span class="date-filter-bar__meta">${periodLabel}</span>
       </div>
     </div>`;
   },
@@ -754,23 +764,16 @@ Object.assign(APP, {
   _finNetWorth(){
     const fmt = window.fmt||(n=>n.toLocaleString('en-IN'));
     const now = new Date();
+    if(this._migratePropertyAnalysisData) this._migratePropertyAnalysisData();
 
     // ── Property Assets ──
     const props = this.props || [];
-    let totalPropertyValue = 0, totalPropertyInvested = 0, totalPropertyLoan = 0;
+    let totalPropertyInvested = 0;
     props.filter(p=>!p._draft).forEach(p=>{
-      const vals = this.getPropValuations ? this.getPropValuations(p.id) : [];
-      const latestMkt = vals.length ? Number(vals[vals.length-1].value)||0 : 0;
-      const mkt = latestMkt > 0 ? latestMkt : Number(p.mkt||0);
       const led = p.ledger&&Array.isArray(p.ledger)&&p.ledger.length ? p.ledger : null;
       const invested = led ? led.reduce((s,e)=>s+Number(e.amount||0),0) : Number(p.cost||0);
-      const effVal = mkt > 0 ? mkt : invested;
-      totalPropertyValue += effVal;
       totalPropertyInvested += invested;
-      totalPropertyLoan += Number(p.loan||0);
     });
-    const propGain = totalPropertyValue - totalPropertyInvested;
-    const propGainPct = totalPropertyInvested > 0 ? ((propGain/totalPropertyInvested)*100).toFixed(1) : null;
 
     // ── Bank / Account Assets ──
     const accs = this.finAccounts || [];
@@ -780,7 +783,7 @@ Object.assign(APP, {
 
     // ── Rental Income (all-time) ──
     const tenantIds = (this.tenants||[]).map(t=>t.id);
-    const totalRentalIncome = (this.payments||[]).filter(pm=>tenantIds.includes(pm.tenantId)&&pm.ptype!=='refund').reduce((s,pm)=>s+Number(pm.amount||0),0);
+    const totalRentalIncome = (this.payments||[]).filter(pm=>tenantIds.includes(pm.tenantId)&&pm.ptype!=='refund').reduce((s,pm)=>s+Number(pm.bankAmt||pm.amount||0)+Number(pm.tdsAmt||0),0);
     const activeRent = (this.tenants||[]).filter(t=>t.status==='active').reduce((s,t)=>s+Number(t.rent||0)+Number(t.maint||0),0);
 
     // ── Khata Book balances ──
@@ -792,8 +795,8 @@ Object.assign(APP, {
     const kbNet = kbLena - kbDena;
 
     // ── Net Worth Calculation ──
-    const totalAssets = totalPropertyValue + cashAssets + (kbNet > 0 ? kbNet : 0);
-    const totalLiabilities = totalPropertyLoan + liabilities + (kbNet < 0 ? Math.abs(kbNet) : 0);
+    const totalAssets = totalPropertyInvested + cashAssets + (kbNet > 0 ? kbNet : 0);
+    const totalLiabilities = liabilities + (kbNet < 0 ? Math.abs(kbNet) : 0);
     const netWorth = totalAssets - totalLiabilities;
 
     // ── Monthly cash flow ──
@@ -805,7 +808,7 @@ Object.assign(APP, {
 
     // ── Asset allocation bar widths ──
     const assetBreakdown = [
-      { label:'🏢 Properties', value:totalPropertyValue, color:'#1565c0' },
+      { label:'🏢 Properties', value:totalPropertyInvested, color:'#1565c0' },
       { label:'🏦 Cash & Bank', value:cashAssets - investAssets, color:'#1a7a45' },
       { label:'📈 Investments', value:investAssets, color:'#7b1fa2' },
       { label:'🤝 Khata Lena', value:kbNet > 0 ? kbNet : 0, color:'#b56a00' },
@@ -837,12 +840,11 @@ Object.assign(APP, {
 
       <!-- KPI GRID -->
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;margin-bottom:16px;">
-        ${kpi('🏢','Property Value','₹'+fmt(totalPropertyValue), propGainPct?(propGain>=0?'▲+':'▼')+propGainPct+'% gain':'—','#e3f2fd','#1565c0','#90b8e8')}
+        ${kpi('🏢','Property Invested','₹'+fmt(totalPropertyInvested), props.filter(p=>!p._draft).length+' properties','#e3f2fd','#1565c0','#90b8e8')}
         ${kpi('🏦','Cash & Bank','₹'+fmt(cashAssets), accs.filter(a=>a.atype!=='liability'&&a.atype!=='credit').length+' accounts','#e8f5e9','#1a7a45','#90c8a0')}
-        ${kpi('📋','Total Liabilities','₹'+fmt(totalLiabilities), 'Property loans + others','#fff0f0','#c0392b','#f09090')}
+        ${kpi('📋','Total Liabilities','₹'+fmt(totalLiabilities), 'Accounts + obligations','#fff0f0','#c0392b','#f09090')}
         ${kpi('💵','Monthly Rent In','₹'+fmt(activeRent), totalRentalIncome>0?'All-time: ₹'+fmt(totalRentalIncome):'No active tenants','#fff8ee','#b56a00','#ffcc80')}
         ${kpi('🤝','Khata Net','₹'+fmt(Math.abs(kbNet)), kbNet>0?'Others owe you':kbNet<0?'You owe others':'All clear','#f5f0ff','#5c3496','#c0a0f0')}
-        ${kpi('🏗️','Property Gain','₹'+fmt(propGain>0?propGain:0), propGainPct?'Return: '+propGainPct+'%':'Market value not set','#e8f5e9','#1a7a45','#90c8a0')}
       </div>
 
       <!-- ASSET BREAKDOWN -->
@@ -872,38 +874,19 @@ Object.assign(APP, {
             <thead><tr style="background:var(--dim);">
               <th style="padding:7px 10px;text-align:left;font-weight:700;">Property</th>
               <th style="padding:7px 10px;text-align:right;font-weight:700;">Invested</th>
-              <th style="padding:7px 10px;text-align:right;font-weight:700;">Mkt Value</th>
-              <th style="padding:7px 10px;text-align:right;font-weight:700;">Gain</th>
-              <th style="padding:7px 10px;text-align:right;font-weight:700;">Loan</th>
-              <th style="padding:7px 10px;text-align:right;font-weight:700;">Equity</th>
             </tr></thead>
             <tbody>
               ${props.filter(p=>!p._draft).map((p,i)=>{
-                const vals = this.getPropValuations ? this.getPropValuations(p.id) : [];
-                const latestMkt = vals.length ? Number(vals[vals.length-1].value)||0 : 0;
-                const mkt = latestMkt > 0 ? latestMkt : Number(p.mkt||0);
                 const led = p.ledger&&Array.isArray(p.ledger)&&p.ledger.length ? p.ledger : null;
                 const invested = led ? led.reduce((s,e)=>s+Number(e.amount||0),0) : Number(p.cost||0);
-                const effVal = mkt > 0 ? mkt : invested;
-                const gain = mkt > 0 && invested > 0 ? mkt - invested : 0;
-                const loan = Number(p.loan||0);
-                const equity = effVal - loan;
                 return `<tr style="background:${i%2===0?'var(--card)':'var(--dim)'};">
                   <td style="padding:6px 10px;font-weight:600;">${p.name.slice(0,22)}</td>
                   <td style="padding:6px 10px;text-align:right;font-family:'JetBrains Mono',monospace;">${fmt(invested)||'—'}</td>
-                  <td style="padding:6px 10px;text-align:right;font-family:'JetBrains Mono',monospace;color:${mkt>0?'var(--grn)':'var(--mut)'};">${mkt?fmt(mkt):'—'}</td>
-                  <td style="padding:6px 10px;text-align:right;font-weight:700;color:${gain>=0?'var(--grn)':'var(--red)'};">${gain?fmt(gain):'—'}</td>
-                  <td style="padding:6px 10px;text-align:right;color:var(--red);">${loan?fmt(loan):'—'}</td>
-                  <td style="padding:6px 10px;text-align:right;font-weight:800;color:${equity>=0?'#5c3496':'var(--red)'};">${fmt(equity)}</td>
                 </tr>`;
               }).join('')}
               <tr style="background:var(--dim);font-weight:800;">
                 <td style="padding:7px 10px;">TOTAL</td>
                 <td style="padding:7px 10px;text-align:right;font-family:'JetBrains Mono',monospace;">${fmt(totalPropertyInvested)}</td>
-                <td style="padding:7px 10px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--grn);">${fmt(totalPropertyValue)}</td>
-                <td style="padding:7px 10px;text-align:right;font-weight:800;color:${propGain>=0?'var(--grn)':'var(--red)'};">${fmt(propGain)}</td>
-                <td style="padding:7px 10px;text-align:right;color:var(--red);">${fmt(totalPropertyLoan)}</td>
-                <td style="padding:7px 10px;text-align:right;font-weight:800;color:#5c3496;">${fmt(totalPropertyValue-totalPropertyLoan)}</td>
               </tr>
             </tbody>
           </table>
@@ -951,14 +934,21 @@ Object.assign(APP, {
       <div style="margin-bottom:14px;">
         <h2 style="font-size:1.3rem;font-weight:800;color:var(--txt);margin-bottom:4px;">💼 Finance Overview</h2>
         <!-- Date filter bar — same style as Khata Book -->
-        <div style="background:var(--card2);border:1px solid var(--bdr);border-radius:10px;padding:9px 14px;margin-top:8px;">
-          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-            <div style="font-size:.72rem;font-weight:800;color:var(--mut);">📅 Date Range: <span style="color:var(--acc);">${periodLabel}</span></div>
-            <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;">
-              <span style="position:relative;display:inline-flex;align-items:center;"><input type="text" id="df_fof" value="${finFrom?isoToDmy(finFrom):''}" placeholder="DD/MM/YYYY" oninput="(function(el){var iso=dmyToIso(el.value);var h=document.getElementById('dfh_fof');if(iso){if(h)h.value=iso;el.style.borderColor='var(--acc)';APP._finOvFrom=iso;APP.renderExpenseOverview();}else{el.style.borderColor=el.value?'var(--red)':'var(--bdr2)';}})(this)" style="font-family:'JetBrains Mono',monospace;font-size:.72rem;padding:3px 26px 3px 7px;border:1.5px solid var(--bdr2);border-radius:6px;background:var(--bg);color:var(--txt);width:108px;outline:none;letter-spacing:.02em;"><span onclick="document.getElementById('dfh_fof').showPicker&&document.getElementById('dfh_fof').showPicker()" style="position:absolute;right:4px;cursor:pointer;font-size:.78rem;opacity:.65;user-select:none;">📅</span><input type="date" id="dfh_fof" value="${finFrom||''} " onchange="(function(iso){var el=document.getElementById('df_fof');if(el){el.value=iso?isoToDmy(iso):'';el.style.borderColor=iso?'var(--acc)':'var(--bdr2)';}  APP._finOvFrom=iso;APP.renderExpenseOverview();})(this.value)" style="position:absolute;opacity:0;width:1px;height:1px;pointer-events:none;"></span>
-              <span style="font-size:.72rem;color:var(--mut)">to</span>
-              <span style="position:relative;display:inline-flex;align-items:center;"><input type="text" id="df_fot" value="${finTo?isoToDmy(finTo):''}" placeholder="DD/MM/YYYY" oninput="(function(el){var iso=dmyToIso(el.value);var h=document.getElementById('dfh_fot');if(iso){if(h)h.value=iso;el.style.borderColor='var(--acc)';APP._finOvTo=iso;APP.renderExpenseOverview();}else{el.style.borderColor=el.value?'var(--red)':'var(--bdr2)';}})(this)" style="font-family:'JetBrains Mono',monospace;font-size:.72rem;padding:3px 26px 3px 7px;border:1.5px solid var(--bdr2);border-radius:6px;background:var(--bg);color:var(--txt);width:108px;outline:none;letter-spacing:.02em;"><span onclick="document.getElementById('dfh_fot').showPicker&&document.getElementById('dfh_fot').showPicker()" style="position:absolute;right:4px;cursor:pointer;font-size:.78rem;opacity:.65;user-select:none;">📅</span><input type="date" id="dfh_fot" value="${finTo||''} " onchange="(function(iso){var el=document.getElementById('df_fot');if(el){el.value=iso?isoToDmy(iso):'';el.style.borderColor=iso?'var(--acc)':'var(--bdr2)';}  APP._finOvTo=iso;APP.renderExpenseOverview();})(this.value)" style="position:absolute;opacity:0;width:1px;height:1px;pointer-events:none;"></span>
-              ${finFrom||finTo?`<button onclick="APP._finOvFrom='';APP._finOvTo='';APP.renderExpenseOverview();" class="btn b-sm b-out" style="font-size:.65rem;padding:2px 6px;">✕ Clear</button>`:''}
+        <div class="date-filter-panel date-filter-panel--compact" style="margin-top:8px;">
+          <div class="date-filter-bar">
+            <span class="date-filter-bar__meta">${periodLabel}</span>
+            <div class="date-filter-bar__tools">
+              ${renderCompactDateRangeFilter({
+                label:'Date',
+                fromId:'dfh_fof',
+                toId:'dfh_fot',
+                fromValue:finFrom,
+                toValue:finTo,
+                fromOnChange:"APP._finOvFrom=this.value;APP.renderExpenseOverview()",
+                toOnChange:"APP._finOvTo=this.value;APP.renderExpenseOverview()",
+                clearOnClick:"APP._finOvFrom='';APP._finOvTo='';APP.renderExpenseOverview()",
+                className:'date-filter-inline--tight'
+              })}
             </div>
           </div>
         </div>
@@ -1145,18 +1135,25 @@ Object.assign(APP, {
 
           <!-- Date filter + Download buttons -->
           <div style="background:var(--card2);padding:9px 14px;border-bottom:1px solid var(--bdr);display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;">
-            <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;">
-              <span style="font-size:.68rem;color:var(--mut);font-weight:700;">📅</span>
-              <span style="position:relative;display:inline-flex;align-items:center;"><input type="text" id="df_alf" value="${accLedgFrom?isoToDmy(accLedgFrom):''}" placeholder="DD/MM/YYYY" oninput="(function(el){var iso=dmyToIso(el.value);var h=document.getElementById('dfh_alf');if(iso){if(h)h.value=iso;el.style.borderColor='var(--acc)';APP._accLedgFrom=iso;APP._finAccounts();}else{el.style.borderColor=el.value?'var(--red)':'var(--bdr2)';}})(this)" style="font-family:'JetBrains Mono',monospace;font-size:.72rem;padding:3px 26px 3px 7px;border:1.5px solid var(--bdr2);border-radius:6px;background:var(--bg);color:var(--txt);width:108px;outline:none;letter-spacing:.02em;"><span onclick="document.getElementById('dfh_alf').showPicker&&document.getElementById('dfh_alf').showPicker()" style="position:absolute;right:4px;cursor:pointer;font-size:.78rem;opacity:.65;user-select:none;">📅</span><input type="date" id="dfh_alf" value="${accLedgFrom||''} " onchange="(function(iso){var el=document.getElementById('df_alf');if(el){el.value=iso?isoToDmy(iso):'';el.style.borderColor=iso?'var(--acc)':'var(--bdr2)';}  APP._accLedgFrom=iso;APP._finAccounts();})(this.value)" style="position:absolute;opacity:0;width:1px;height:1px;pointer-events:none;"></span>
-              <span style="font-size:.72rem;color:var(--mut)">to</span>
-              <span style="position:relative;display:inline-flex;align-items:center;"><input type="text" id="df_alt" value="${accLedgTo?isoToDmy(accLedgTo):''}" placeholder="DD/MM/YYYY" oninput="(function(el){var iso=dmyToIso(el.value);var h=document.getElementById('dfh_alt');if(iso){if(h)h.value=iso;el.style.borderColor='var(--acc)';APP._accLedgTo=iso;APP._finAccounts();}else{el.style.borderColor=el.value?'var(--red)':'var(--bdr2)';}})(this)" style="font-family:'JetBrains Mono',monospace;font-size:.72rem;padding:3px 26px 3px 7px;border:1.5px solid var(--bdr2);border-radius:6px;background:var(--bg);color:var(--txt);width:108px;outline:none;letter-spacing:.02em;"><span onclick="document.getElementById('dfh_alt').showPicker&&document.getElementById('dfh_alt').showPicker()" style="position:absolute;right:4px;cursor:pointer;font-size:.78rem;opacity:.65;user-select:none;">📅</span><input type="date" id="dfh_alt" value="${accLedgTo||''} " onchange="(function(iso){var el=document.getElementById('df_alt');if(el){el.value=iso?isoToDmy(iso):'';el.style.borderColor=iso?'var(--acc)':'var(--bdr2)';}  APP._accLedgTo=iso;APP._finAccounts();})(this.value)" style="position:absolute;opacity:0;width:1px;height:1px;pointer-events:none;"></span>
-              ${accLedgFrom||accLedgTo?`<button onclick="APP._accLedgFrom='';APP._accLedgTo='';APP._finAccounts();" class="btn b-sm b-out" style="font-size:.65rem;padding:2px 7px;">✕ Clear</button>`:''}
-              <span style="font-size:.65rem;color:var(--acc);font-weight:700;">${periodLabel} · ${txns.length} entries</span>
+            <div class="date-filter-bar__tools">
+              ${renderCompactDateRangeFilter({
+                label:'Date',
+                fromId:'dfh_alf',
+                toId:'dfh_alt',
+                fromValue:accLedgFrom,
+                toValue:accLedgTo,
+                fromOnChange:"APP._accLedgFrom=this.value;APP._finAccounts()",
+                toOnChange:"APP._accLedgTo=this.value;APP._finAccounts()",
+                clearOnClick:"APP._accLedgFrom='';APP._accLedgTo='';APP._finAccounts()",
+                meta:`${periodLabel} · ${txns.length} entries`,
+                className:'date-filter-inline--tight'
+              })}
             </div>
-            <div style="display:flex;gap:5px;flex-wrap:wrap;">
-              <button onclick="APP._accLedgerPDF('${acc.id}')" class="btn b-sm b-out" style="border-color:#e53935;color:#e53935;font-size:.68rem;">📄 PDF</button>${APP._pdfOriHtml()}
-              <button onclick="APP._accLedgerWord('${acc.id}')" class="btn b-sm b-out" style="border-color:#1565c0;color:#1565c0;font-size:.68rem;">📝 Word</button>
-              <button onclick="APP._accLedgerCSV('${acc.id}')" class="btn b-sm b-out" style="border-color:#2e7d32;color:#2e7d32;font-size:.68rem;">📊 Excel/CSV</button>
+            <div class="export-toolbar export-toolbar-sm">
+              ${APP._pdfOriHtml()}
+              <button onclick="APP._accLedgerPDF('${acc.id}')" class="btn b-sm b-out export-tool-btn export-tool-pdf"><span class="material-symbols-outlined">picture_as_pdf</span><span>PDF</span></button>
+              <button onclick="APP._accLedgerWord('${acc.id}')" class="btn b-sm b-out export-tool-btn export-tool-word"><span class="material-symbols-outlined">description</span><span>Word</span></button>
+              <button onclick="APP._accLedgerCSV('${acc.id}')" class="btn b-sm b-out export-tool-btn export-tool-csv"><span class="material-symbols-outlined">table_view</span><span>CSV</span></button>
             </div>
           </div>
 
@@ -2004,13 +2001,19 @@ Object.assign(APP, {
             </div>
           </div>
           <!-- Date filter — same Khata Book style -->
-          <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;">
-            <span style="font-size:.68rem;color:var(--mut);font-weight:700;">📅</span>
-            <span style="position:relative;display:inline-flex;align-items:center;"><input type="text" id="df_rrf" value="${repFrom?isoToDmy(repFrom):''}" placeholder="DD/MM/YYYY" oninput="(function(el){var iso=dmyToIso(el.value);var h=document.getElementById('dfh_rrf');if(iso){if(h)h.value=iso;el.style.borderColor='var(--acc)';APP._repFrom=iso;APP._finReports();}else{el.style.borderColor=el.value?'var(--red)':'var(--bdr2)';}})(this)" style="font-family:'JetBrains Mono',monospace;font-size:.72rem;padding:3px 26px 3px 7px;border:1.5px solid var(--bdr2);border-radius:6px;background:var(--bg);color:var(--txt);width:108px;outline:none;letter-spacing:.02em;"><span onclick="document.getElementById('dfh_rrf').showPicker&&document.getElementById('dfh_rrf').showPicker()" style="position:absolute;right:4px;cursor:pointer;font-size:.78rem;opacity:.65;user-select:none;">📅</span><input type="date" id="dfh_rrf" value="${repFrom||''} " onchange="(function(iso){var el=document.getElementById('df_rrf');if(el){el.value=iso?isoToDmy(iso):'';el.style.borderColor=iso?'var(--acc)':'var(--bdr2)';}  APP._repFrom=iso;APP._finReports();})(this.value)" style="position:absolute;opacity:0;width:1px;height:1px;pointer-events:none;"></span>
-            <span style="font-size:.72rem;color:var(--mut)">to</span>
-            <span style="position:relative;display:inline-flex;align-items:center;"><input type="text" id="df_rrt" value="${repTo?isoToDmy(repTo):''}" placeholder="DD/MM/YYYY" oninput="(function(el){var iso=dmyToIso(el.value);var h=document.getElementById('dfh_rrt');if(iso){if(h)h.value=iso;el.style.borderColor='var(--acc)';APP._repTo=iso;APP._finReports();}else{el.style.borderColor=el.value?'var(--red)':'var(--bdr2)';}})(this)" style="font-family:'JetBrains Mono',monospace;font-size:.72rem;padding:3px 26px 3px 7px;border:1.5px solid var(--bdr2);border-radius:6px;background:var(--bg);color:var(--txt);width:108px;outline:none;letter-spacing:.02em;"><span onclick="document.getElementById('dfh_rrt').showPicker&&document.getElementById('dfh_rrt').showPicker()" style="position:absolute;right:4px;cursor:pointer;font-size:.78rem;opacity:.65;user-select:none;">📅</span><input type="date" id="dfh_rrt" value="${repTo||''} " onchange="(function(iso){var el=document.getElementById('df_rrt');if(el){el.value=iso?isoToDmy(iso):'';el.style.borderColor=iso?'var(--acc)':'var(--bdr2)';}  APP._repTo=iso;APP._finReports();})(this.value)" style="position:absolute;opacity:0;width:1px;height:1px;pointer-events:none;"></span>
-            ${repFrom||repTo?`<button onclick="APP._repFrom='';APP._repTo='';APP._finReports();" class="btn b-sm b-out" style="font-size:.65rem;padding:2px 7px;">✕ Clear</button>`:''}
-            <span style="font-size:.65rem;color:var(--acc);font-weight:700;margin-left:4px;">${periodLabel}</span>
+          <div class="date-filter-bar__tools">
+            ${renderCompactDateRangeFilter({
+              label:'Date',
+              fromId:'dfh_rrf',
+              toId:'dfh_rrt',
+              fromValue:repFrom,
+              toValue:repTo,
+              fromOnChange:"APP._repFrom=this.value;APP._finReports()",
+              toOnChange:"APP._repTo=this.value;APP._finReports()",
+              clearOnClick:"APP._repFrom='';APP._repTo='';APP._finReports()",
+              meta:periodLabel,
+              className:'date-filter-inline--tight'
+            })}
           </div>
         </div>
         <!-- Transaction rows -->
@@ -2505,7 +2508,7 @@ Object.assign(APP, {
               else timing = 'Late';
             }
             console.log('[ledgerData] payment:', p.date, 'rentForMonth:', p.rentForMonth, 'charged:', mo.charged, 'timing:', timing);
-            rows.push({tenant:t.name,property:prop?prop.name:'—',rentMonth:mLabel,payDate:fDL(p.date),charged:chargedAmt,amount:(p.ptype==='refund'?-1:1)*Number(p.amount),mode:p.mode||'Cash',note:p.note||p.ref||'',timing,status:p.ptype==='refund'?'Refund':timing,balance:mo.runningBalance,invoiceDate:invoiceLbl,dueDate:dueLbl});
+            rows.push({tenant:t.name,property:prop?prop.name:'—',rentMonth:mLabel,payDate:fDL(p.date),charged:chargedAmt,amount:(p.ptype==='refund'?-1:1)*(Number(p.bankAmt||p.amount||0)+Number(p.tdsAmt||0)),mode:p.mode||'Cash',note:p.note||p.ref||'',timing,status:p.ptype==='refund'?'Refund':timing,balance:mo.runningBalance,invoiceDate:invoiceLbl,dueDate:dueLbl});
           });
         }
       });
@@ -2524,7 +2527,7 @@ Object.assign(APP, {
         rows.push({
           tenant:t.name, property:prop?prop.name:'—',
           rentMonth:mLabel, payDate:fDL(p.date),
-          charged:0, amount:(p.ptype==='refund'?-1:1)*Number(p.amount),
+          charged:0, amount:(p.ptype==='refund'?-1:1)*(Number(p.bankAmt||p.amount||0)+Number(p.tdsAmt||0)),
           mode:p.mode||'Cash', note:p.note||p.ref||'',
           timing:'Advance', status:'Advance',
           balance:0, invoiceDate:'—', dueDate:'—'

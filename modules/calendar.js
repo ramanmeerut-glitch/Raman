@@ -117,13 +117,11 @@ Object.assign(APP, {
     const today=new Date();
     const evts={};
     const ae=(ds,c,l)=>{if(!ds)return;const d=new Date(ds);if(d.getFullYear()===yr&&d.getMonth()===mo){const k=d.getDate();if(!evts[k])evts[k]=[];evts[k].push({c,l});}};
+    const getReminderDate=(r)=>r.mode==='recurring'
+      ? (r.nextTrigger||r.start||r.reminderDate||r.alertDate||r.trigDate||null)
+      : (r.reminderDate||r.alertDate||r.trigDate||r.dueDate||r.exp||null);
     this.reminders.forEach(r=>{
-      // Use trigDate (actual reminder date) first, fallback to exp for legacy
-      const rTrigDate = r.trigDate || (()=>{
-        if(r.mode==='recurring') return r.nextTrigger||r.start||null;
-        if(!r.exp) return null;
-        try{ const d=new Date(r.exp); d.setDate(d.getDate()-parseInt(r.before||0)); return d.toISOString().split('T')[0]; }catch(e){return r.exp;}
-      })();
+      const rTrigDate = getReminderDate(r);
       if(rTrigDate) ae(rTrigDate,'#1a73e8','🔔'); // blue dot on reminder date
       if(r.exp && r.exp!==rTrigDate) ae(r.exp,'#b92d2d','⚠️');  // red dot on expiry
       if(r.issue) ae(r.issue,'#1760a0','📋');
@@ -145,12 +143,7 @@ Object.assign(APP, {
     // Events list
     const allEvs=[];
     this.reminders.forEach(r=>{
-      // Use trigDate for reminder event, expiry separately
-      const rTrigDate = r.trigDate || (()=>{
-        if(r.mode==='recurring') return r.nextTrigger||r.start||null;
-        if(!r.exp) return null;
-        try{ const d=new Date(r.exp); d.setDate(d.getDate()-parseInt(r.before||0)); return d.toISOString().split('T')[0]; }catch(e){return r.exp;}
-      })();
+      const rTrigDate = getReminderDate(r);
       if(rTrigDate){
         const d=new Date(rTrigDate);
         if(d.getFullYear()===yr&&d.getMonth()===mo){
@@ -185,24 +178,24 @@ Object.assign(APP, {
       else if(e._visitId) delAction=`<button class="btn b-red b-sm" style="padding:3px 8px;font-size:.7rem;" onclick="APP.delVisit('${e._visitId}')" title="Delete this visit">🗑</button>`;
       else if(e._tripId) delAction=`<button class="btn b-red b-sm" style="padding:3px 8px;font-size:.7rem;" onclick="APP.delTrip('${e._tripId}')" title="Delete this trip">🗑</button>`;
       else if(e._calEvId) delAction=`<button class="btn b-sm" style="padding:3px 8px;font-size:.7rem;background:#e3f2fd;color:#1565c0;border:1px solid #90b8e8;" onclick="APP.openCalEventModal('${e.date}','${e._calEvId}')" title="Edit event">✏️</button><button class="btn b-red b-sm" style="padding:3px 8px;font-size:.7rem;margin-left:3px;" onclick="APP._delCalEvent('${e._calEvId}')" title="Delete event">🗑</button>`;
-      return`<div style="display:flex;align-items:center;gap:9px;padding:7px 12px;border-bottom:1px solid var(--bdr)">
-        <span>${e.icon}</span>
-        <div style="flex:1">
-          <div style="font-size:.8rem;font-weight:600">${e.label}</div>
-          <div style="font-size:.68rem;color:var(--mut)">${fD(e.date)} · ${e.type}</div>
+      return`<div class="cal-event-row">
+        <span class="cal-event-icon">${e.icon}</span>
+        <div class="cal-event-copy">
+          <div class="cal-event-title">${e.label}</div>
+          <div class="cal-event-meta">${fD(e.date)} · ${e.type}</div>
         </div>
-        <span class="badge" style="background:rgba(0,0,0,.05);color:${e.c}">${fD(e.date)}</span>
+        <span class="badge cal-event-badge" style="background:rgba(0,0,0,.05);color:${e.c}">${fD(e.date)}</span>
         ${delAction}
       </div>`;
     }).join('');
 
     document.getElementById('pan-calendar').innerHTML=`
-      <div style="display:grid;grid-template-columns:1fr 320px;gap:16px;align-items:start;">
-        <div>
+      <div class="calendar-page">
+        <div class="calendar-main">
           <div class="cal-wrap">
             <div class="cal-hdr">
               <div class="cal-title">📅 ${MONTHS[mo]} ${yr}</div>
-              <div class="cal-nav">
+              <div class="cal-nav calendar-toolbar">
                 <button onclick="APP.calM--;if(APP.calM<0){APP.calM=11;APP.calY--;}APP.renderCalendar()">‹ Prev</button>
                 <button onclick="APP.calY=new Date().getFullYear();APP.calM=new Date().getMonth();APP.renderCalendar()" style="background:var(--acc);color:#fff;border-color:var(--acc)">Today</button>
                 <button onclick="APP.calM++;if(APP.calM>11){APP.calM=0;APP.calY++;}APP.renderCalendar()">Next ›</button>
@@ -211,7 +204,7 @@ Object.assign(APP, {
             </div>
             <div class="cal-grid">${cg}</div>
           </div>
-          <div style="display:flex;flex-wrap:wrap;gap:8px;font-size:.72rem;">
+          <div class="calendar-legend">
             <span style="display:flex;align-items:center;gap:4px"><span style="width:9px;height:9px;border-radius:50%;background:#1a73e8;display:inline-block"></span>Reminder</span>
             <span style="display:flex;align-items:center;gap:4px"><span style="width:9px;height:9px;border-radius:50%;background:#b92d2d;display:inline-block"></span>Expiry</span>
             <span style="display:flex;align-items:center;gap:4px"><span style="width:9px;height:9px;border-radius:50%;background:#1760a0;display:inline-block"></span>Issue</span>
@@ -221,7 +214,7 @@ Object.assign(APP, {
             <span style="display:flex;align-items:center;gap:4px"><span style="width:9px;height:9px;border-radius:50%;background:#1565c0;display:inline-block"></span>Personal Events</span>
           </div>
         </div>
-        <div class="card" style="max-height:580px;overflow-y:auto;">
+        <div class="card calendar-sidecard" style="max-height:580px;overflow-y:auto;">
           <div class="card-hdr"><div class="card-title">📋 ${MONTHS[mo]} Events</div><span class="ct">${allEvs.length}</span></div>
           ${evList||'<div class="empty" style="padding:24px">No events</div>'}
         </div>

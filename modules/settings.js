@@ -1,4 +1,4 @@
-/* modules/settings.js — Settings — exportData, importData, openSettings, renderQuickLinks
+/* modules/settings.js — Settings, quick links, login, and delete tools
  * Extends the APP object defined in modules/home.js.
  * Load order: after home.js, before rem-engine.js and notifications.js.
  */
@@ -6,63 +6,6 @@
 'use strict';
 
 Object.assign(APP, {
-  // ══ EXPORT / IMPORT ══
-  exportData(){
-    const keys=['props','tenants','payments','reminders','patients','visits','trips','buckets'];
-    const data={};keys.forEach(k=>data[k]=S.get(k));data.persons=this.persons;
-    const exp={_meta:{exportedAt:new Date().toISOString(),exportedDate:todayDMY(),version:'4',app:'Raman Kumar Dashboard'},data};
-    const blob=new Blob([JSON.stringify(exp,null,2)],{type:'application/json'});
-    const url=URL.createObjectURL(blob);const a=document.createElement('a');
-    const ds=new Date().toISOString().slice(0,10).replace(/-/g,'');
-    a.href=url;a.download=`RamanDashboard_v4_${ds}.json`;a.click();URL.revokeObjectURL(url);
-    document.getElementById('eiMT').textContent='✅ Export Successful';
-    document.getElementById('eiMB').innerHTML=`<div style="background:#f0faf5;border:1px solid #90c8a0;border-radius:9px;padding:14px;font-size:.83rem;line-height:1.8;">
-      <b>File downloaded:</b> RamanDashboard_v4_${ds}.json<br>
-      🏢 Properties: ${this.props.length} | 👥 Tenants: ${this.tenants.length} | 💰 Payments: ${this.payments.length}<br>
-      🔔 Reminders: ${this.reminders.length} | 🏥 Patients: ${this.patients.length} | 💊 Visits: ${this.visits.length}<br>
-      ✈️ Trips: ${this.trips.length} | 🌟 Bucket: ${this.buckets.length}<br><br>
-      <b>📌 To send to Claude for update:</b><br>
-      1. Find the .json file in Downloads<br>2. Attach it in Claude chat (📎 icon)<br>3. Say "Update my website with this data"
-    </div>`;
-    M.open('eiM');
-  },
-  importData(event){
-    const file=event.target.files[0];if(!file)return;
-    if(!file.name.endsWith('.json')){alert('Please select a .json file');return;}
-    const reader=new FileReader();
-    reader.onload=e=>{
-      try{
-        const obj=JSON.parse(e.target.result);
-        const data=obj.data||obj;
-        if(!data.props&&!data.tenants&&!data.reminders){alert('Invalid file — not a Raman Dashboard backup');return;}
-        this._impBuf={persons:data.persons||['Raman'],props:data.props||[],tenants:data.tenants||[],payments:data.payments||[],reminders:data.reminders||[],patients:data.patients||[],visits:data.visits||[],trips:data.trips||[],buckets:data.buckets||[]};
-        const b=this._impBuf;const meta=obj._meta||{};
-        document.getElementById('eiMT').textContent='⬆️ Import Preview';
-        document.getElementById('eiMB').innerHTML=`<div style="background:#e3f2fd;border:1px solid #90b8e8;border-radius:9px;padding:13px;font-size:.83rem;margin-bottom:12px;line-height:1.8;">
-          <b>File:</b> ${file.name}${meta.exportedDate?`<br><b>Exported:</b> ${meta.exportedDate}`:''}<br>
-          🏢 ${b.props.length} props | 👥 ${b.tenants.length} tenants | 💰 ${b.payments.length} payments<br>
-          🔔 ${b.reminders.length} reminders | 🏥 ${b.patients.length} patients | 💊 ${b.visits.length} visits<br>
-          ✈️ ${b.trips.length} trips | 🌟 ${b.buckets.length} bucket
-        </div>
-        <div style="background:#fff8ee;border:1px solid #f0c060;border-radius:9px;padding:12px;font-size:.82rem;color:#5a4000;margin-bottom:14px;">
-          ⚠️ This will replace ALL current data. Export first if needed!
-        </div>
-        <div style="display:flex;gap:8px;justify-content:flex-end;">
-          <button class="btn b-out" onclick="M.close('eiM')">Cancel</button>
-          <button class="btn b-gold" onclick="APP.doImport()">✅ Yes, Import Now</button>
-        </div>`;
-        M.open('eiM');
-      }catch(err){alert('Could not read file: '+err.message);}
-    };
-    reader.readAsText(file);event.target.value='';
-  },
-  doImport(){
-    const b=this._impBuf;if(!b)return;
-    ['persons','props','tenants','payments','reminders','patients','visits','trips','buckets'].forEach(k=>S.set(k,b[k]));
-    this._impBuf=null;M.close('eiM');
-    setTimeout(()=>{this.curPerson=(b.persons&&b.persons[0])||'Raman';this.refreshPersons();this.renderPills();this.renderTab(this.curTab);alert(`✅ Import done!\n${b.props.length} properties, ${b.tenants.length} tenants, ${b.visits.length} medical records loaded.`);},100);
-  },
-
   confirmDel(){if(this.delCb){this.delCb();this.delCb=null;}M.close('delM');},
 
   // ── FIREBASE SAVE ALL ──
@@ -132,17 +75,26 @@ Object.assign(APP, {
 
   // ── SETTINGS ──
   openSettings(){
+    const settingsRow = (mainHtml, actionHtml, extraClass='') => `
+      <div class="settings-list-row ${extraClass}">
+        <div class="settings-list-main">${mainHtml}</div>
+        ${actionHtml}
+      </div>`;
+
     // Render quick links manager
     let links; try{ links=JSON.parse(localStorage.getItem('rk_quicklinks')||'[]'); }catch{ links=[]; }
     const linksEl=document.getElementById('settingsLinks');
     if(links.length){
       linksEl.innerHTML=links.map((l,i)=>`
-        <div style="display:flex;align-items:center;gap:8px;background:var(--bg);border:1px solid var(--bdr);border-radius:7px;padding:7px 10px;">
-          <img src="https://www.google.com/s2/favicons?domain=${l.url}&sz=16" onerror="this.style.display='none'" style="width:14px;height:14px;">
-          <span style="flex:1;font-size:.82rem;font-weight:600;">${l.name}</span>
-          <span style="font-size:.72rem;color:var(--mut);">${l.url}</span>
-          <button class="btn b-red b-sm" onclick="APP.delQuickLink(${i});APP.openSettings()">🗑 Remove</button>
-        </div>`).join('');
+        ${settingsRow(
+          `<img src="https://www.google.com/s2/favicons?domain=${l.url}&sz=16" onerror="this.style.display='none'" style="width:14px;height:14px;flex:0 0 auto;">
+           <div class="settings-link-copy">
+             <span class="settings-link-name">${l.name}</span>
+             <span class="settings-link-url">${l.url}</span>
+           </div>`,
+          `<button class="btn b-red b-sm" onclick="APP.delQuickLink(${i});APP.openSettings()">🗑 Remove</button>`,
+          'settings-link-row'
+        )}`).join('');
     } else {
       linksEl.innerHTML='<div style="color:var(--mut);font-size:.82rem;padding:6px;">No quick links added yet.</div>';
     }
@@ -154,65 +106,55 @@ Object.assign(APP, {
     // Properties
     if(this.props.length){
       html+=`<div style="font-size:.72rem;font-weight:700;color:var(--mut);text-transform:uppercase;letter-spacing:.05em;padding:4px 0 2px;">🏢 Properties</div>`;
-      html+=this.props.map(p=>`<div style="display:flex;align-items:center;gap:8px;background:var(--bg);border:1px solid var(--bdr);border-radius:7px;padding:6px 10px;">
-        <span style="flex:1;font-size:.82rem;">🏢 ${p.name} ${p.city?'— '+p.city:''}</span>
-        <button class="btn b-red b-sm" onclick="APP._settingsDelProp('${p.id}')">🗑 Delete</button>
-      </div>`).join('');
+      html+=this.props.map(p=>settingsRow(
+        `<span class="settings-list-text">🏢 ${p.name} ${p.city?'— '+p.city:''}</span>`,
+        `<button class="btn b-red b-sm" onclick="APP._settingsDelProp('${p.id}')">🗑 Delete</button>`
+      )).join('');
     }
 
     // Tenants
     if(this.tenants.length){
       html+=`<div style="font-size:.72rem;font-weight:700;color:var(--mut);text-transform:uppercase;letter-spacing:.05em;padding:6px 0 2px;">👥 Tenants</div>`;
-      html+=this.tenants.map(t=>{const p=this.props.find(x=>x.id===t.propId);return`<div style="display:flex;align-items:center;gap:8px;background:var(--bg);border:1px solid var(--bdr);border-radius:7px;padding:6px 10px;">
-        <span style="flex:1;font-size:.82rem;">👤 ${t.name} ${p?'— '+p.name:''}</span>
-        <button class="btn b-red b-sm" onclick="APP._settingsDelTenant('${t.id}')">🗑 Delete</button>
-      </div>`;}).join('');
+      html+=this.tenants.map(t=>{const p=this.props.find(x=>x.id===t.propId);return settingsRow(
+        `<span class="settings-list-text">👤 ${t.name} ${p?'— '+p.name:''}</span>`,
+        `<button class="btn b-red b-sm" onclick="APP._settingsDelTenant('${t.id}')">🗑 Delete</button>`
+      );}).join('');
     }
 
     // Payments
     if(this.payments.length){
       html+=`<div style="font-size:.72rem;font-weight:700;color:var(--mut);text-transform:uppercase;letter-spacing:.05em;padding:6px 0 2px;">💰 Payments (${this.payments.length} records)</div>`;
-      html+=[...this.payments].sort((a,b)=>(b.date||'').localeCompare(a.date||'')).slice(0,10).map(p=>{const t=this.tenants.find(x=>x.id===p.tenantId);return`<div style="display:flex;align-items:center;gap:8px;background:var(--bg);border:1px solid var(--bdr);border-radius:7px;padding:6px 10px;">
-        <span style="flex:1;font-size:.82rem;">💰 ${fD(p.date)} — ${t?t.name:'?'} — ${fmt(p.amount)}</span>
-        <button class="btn b-red b-sm" onclick="APP._settingsDelPayment('${p.id}')">🗑 Delete</button>
-      </div>`;}).join('');
+      html+=[...this.payments].sort((a,b)=>(b.date||'').localeCompare(a.date||'')).slice(0,10).map(p=>{const t=this.tenants.find(x=>x.id===p.tenantId);return settingsRow(
+        `<span class="settings-list-text">💰 ${fD(p.date)} — ${t?t.name:'?'} — ${fmt(p.amount)}</span>`,
+        `<button class="btn b-red b-sm" onclick="APP._settingsDelPayment('${p.id}')">🗑 Delete</button>`
+      );}).join('');
     }
 
     // Reminders
     if(this.reminders.length){
       html+=`<div style="font-size:.72rem;font-weight:700;color:var(--mut);text-transform:uppercase;letter-spacing:.05em;padding:6px 0 2px;">🔔 Reminders</div>`;
-      html+=this.reminders.map(r=>`<div style="display:flex;align-items:center;gap:8px;background:var(--bg);border:1px solid var(--bdr);border-radius:7px;padding:6px 10px;">
-        <span style="flex:1;font-size:.82rem;">🔔 ${r.name} — ${r.type} — ${fD(r.exp)}</span>
-        <button class="btn b-red b-sm" onclick="APP._settingsDelReminder('${r.id}')">🗑 Delete</button>
-      </div>`).join('');
+      html+=this.reminders.map(r=>settingsRow(
+        `<span class="settings-list-text">🔔 ${r.name} — ${r.type} — ${fD(r.exp)}</span>`,
+        `<button class="btn b-red b-sm" onclick="APP._settingsDelReminder('${r.id}')">🗑 Delete</button>`
+      )).join('');
     }
 
     // Medical
     if(this.visits.length){
       html+=`<div style="font-size:.72rem;font-weight:700;color:var(--mut);text-transform:uppercase;letter-spacing:.05em;padding:6px 0 2px;">🏥 Medical Visits</div>`;
-      html+=this.visits.map(r=>{const p=this.patients.find(x=>x.id===r.patId);return`<div style="display:flex;align-items:center;gap:8px;background:var(--bg);border:1px solid var(--bdr);border-radius:7px;padding:6px 10px;">
-        <span style="flex:1;font-size:.82rem;">🏥 ${fD(r.date)} — ${p?p.name:'?'} — Dr.${r.doctor||'—'}</span>
-        <button class="btn b-red b-sm" onclick="APP._settingsDelVisit('${r.id}')">🗑 Delete</button>
-      </div>`;}).join('');
+      html+=this.visits.map(r=>{const p=this.patients.find(x=>x.id===r.patId);return settingsRow(
+        `<span class="settings-list-text">🏥 ${fD(r.date)} — ${p?p.name:'?'} — Dr.${r.doctor||'—'}</span>`,
+        `<button class="btn b-red b-sm" onclick="APP._settingsDelVisit('${r.id}')">🗑 Delete</button>`
+      );}).join('');
     }
 
     // Trips
     if(this.trips.length){
       html+=`<div style="font-size:.72rem;font-weight:700;color:var(--mut);text-transform:uppercase;letter-spacing:.05em;padding:6px 0 2px;">✈️ Trips</div>`;
-      html+=this.trips.map(t=>`<div style="display:flex;align-items:center;gap:8px;background:var(--bg);border:1px solid var(--bdr);border-radius:7px;padding:6px 10px;">
-        <span style="flex:1;font-size:.82rem;">✈️ ${t.dest} — ${fD(t.dep)}</span>
-        <button class="btn b-red b-sm" onclick="APP._settingsDelTrip('${t.id}')">🗑 Delete</button>
-      </div>`).join('');
-    }
-
-    // Diary
-    let diary; try{ diary=JSON.parse(localStorage.getItem('rk_diary')||'[]'); }catch{ diary=[]; }
-    if(diary.length){
-      html+=`<div style="font-size:.72rem;font-weight:700;color:var(--mut);text-transform:uppercase;letter-spacing:.05em;padding:6px 0 2px;">📖 Diary Entries</div>`;
-      html+=diary.slice(0,10).map(e=>`<div style="display:flex;align-items:center;gap:8px;background:var(--bg);border:1px solid var(--bdr);border-radius:7px;padding:6px 10px;">
-        <span style="flex:1;font-size:.82rem;">📖 ${fD(e.date)} — ${e.title||'Untitled'}</span>
-        <button class="btn b-red b-sm" onclick="APP._settingsDelDiary('${e.id}')">🗑 Delete</button>
-      </div>`).join('');
+      html+=this.trips.map(t=>settingsRow(
+        `<span class="settings-list-text">✈️ ${t.dest} — ${fD(t.dep)}</span>`,
+        `<button class="btn b-red b-sm" onclick="APP._settingsDelTrip('${t.id}')">🗑 Delete</button>`
+      )).join('');
     }
 
     if(!html) html='<div style="color:var(--mut);font-size:.82rem;padding:8px;">No records to delete.</div>';
@@ -290,27 +232,12 @@ Object.assign(APP, {
     M.close('settingsM');
     setTimeout(()=>M.open('delM'),100);
   },
-  _settingsDelDiary(id){
-    this.delCb=()=>{
-      this.saveDiaryEntries(this.getDiaryEntries().filter(e=>e.id!==id));
-      this.renderDiary();
-      M.close('settingsM');
-      setTimeout(()=>this.openSettings(),100);
-    };
-    document.getElementById('delMsg').textContent='Delete this diary entry?';
-    M.close('settingsM');
-    setTimeout(()=>M.open('delM'),100);
-  },
-
   // ── PDF ORIENTATION TOGGLE ──
   _setPdfOrientation(ori){
     this._pdfOrientation = ori;
-    // Update all toggle buttons in the page
     document.querySelectorAll('.pdf-ori-btn').forEach(btn=>{
       const isActive = btn.dataset.ori === ori;
-      btn.style.background = isActive ? '#e53935' : '#fff';
-      btn.style.color = isActive ? '#fff' : '#e53935';
-      btn.style.borderColor = '#e53935';
+      btn.classList.toggle('is-active', isActive);
     });
     this.showToastMsg(ori==='landscape' ? '🖨️ PDF: Landscape (wide)' : '🖨️ PDF: Portrait (vertical)');
   },
@@ -318,9 +245,12 @@ Object.assign(APP, {
   // Renders the portrait/landscape toggle — call inline wherever a PDF button exists
   _pdfOriHtml(){
     const p = this._pdfOrientation||'portrait';
-    return `<span style="display:inline-flex;border:1.5px solid #e53935;border-radius:6px;overflow:hidden;vertical-align:middle;margin-left:4px;">` +
-      `<button class="pdf-ori-btn" data-ori="portrait"  onclick="APP._setPdfOrientation('portrait')"  style="padding:4px 8px;font-size:.68rem;font-weight:800;cursor:pointer;border:none;font-family:Nunito,sans-serif;background:${p==='portrait'?'#e53935':'#fff'};color:${p==='portrait'?'#fff':'#e53935'};">⬛ P</button>` +
-      `<button class="pdf-ori-btn" data-ori="landscape" onclick="APP._setPdfOrientation('landscape')" style="padding:4px 8px;font-size:.68rem;font-weight:800;cursor:pointer;border:none;border-left:1.5px solid #e53935;font-family:Nunito,sans-serif;background:${p==='landscape'?'#e53935':'#fff'};color:${p==='landscape'?'#fff':'#e53935'};">⬜ L</button>` +
+    return `<span class="pdf-ori-group" role="group" aria-label="PDF orientation">` +
+      `<span class="pdf-ori-label">Orientation</span>` +
+      `<span class="pdf-ori-toggle">` +
+        `<button class="pdf-ori-btn ${p==='portrait'?'is-active':''}" data-ori="portrait" onclick="APP._setPdfOrientation('portrait')">Portrait</button>` +
+        `<button class="pdf-ori-btn ${p==='landscape'?'is-active':''}" data-ori="landscape" onclick="APP._setPdfOrientation('landscape')">Landscape</button>` +
+      `</span>` +
     `</span>`;
   },
 
@@ -344,12 +274,22 @@ Object.assign(APP, {
     let links; try{ links=JSON.parse(localStorage.getItem('rk_quicklinks')||'[]'); }catch{ links=[]; }
     const container=document.getElementById('qlLinks');
     if(!container)return;
+    const iconMeta=function(link){
+      const name=(link.name||'').toLowerCase();
+      const url=(link.url||'').toLowerCase();
+      if(name.includes('icici')||url.includes('icici')) return {icon:'account_balance',cls:'is-bank'};
+      if(name.includes('rera')||url.includes('rera')) return {icon:'real_estate_agent',cls:'is-rera'};
+      if(name.includes('obpas')||url.includes('obpas')) return {icon:'domain',cls:'is-obpas'};
+      if(name.includes('maint')||name.includes('shop')||url.includes('maintenance')) return {icon:'home_repair_service',cls:'is-maintenance'};
+      if(name.includes('court')||url.includes('court')) return {icon:'gavel',cls:'is-legal'};
+      if(name.includes('google')||url.includes('google')) return {icon:'language',cls:'is-default'};
+      return {icon:'link',cls:'is-default'};
+    };
     container.innerHTML=links.map((l,i)=>`
-      <span class="ql-link" title="${l.url}">
-        <img src="https://www.google.com/s2/favicons?domain=${l.url}&sz=16" onerror="this.style.display='none'" style="width:14px;height:14px;">
-        <a href="${l.url.startsWith('http')?l.url:'https://'+l.url}" target="_blank" style="text-decoration:none;color:inherit;">${l.name}</a>
-
-      </span>`).join('');
+      <a class="ql-link ql-link-item" href="${l.url.startsWith('http')?l.url:'https://'+l.url}" target="_blank" title="${l.url}">
+        <span class="material-symbols-outlined ql-link-icon ${iconMeta(l).cls}" aria-hidden="true">${iconMeta(l).icon}</span>
+        <span>${l.name}</span>
+      </a>`).join('');
   },
   addQuickLink(){
     const name=prompt('Website ka naam? (e.g. ICICI, Court, Google)');
